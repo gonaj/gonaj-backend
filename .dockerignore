@@ -1,0 +1,25 @@
+# Prevent local environment from contaminating container build
+.venv
+venv
+__pycache__/
+*.pyc
+*.pyo
+
+# Django
+*.sqlite3
+
+# Secrets
+.env
+
+# Git
+.git
+.gitignore
+
+# Node / frontend
+node_modules/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log

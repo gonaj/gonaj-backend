@@ -1,0 +1,36 @@
+# docker-compose.yml
+# Minimal compose v2+ style (no top-level `version` key)
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env # load environment variables from .env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    # For dev: mount source so edits on host reflect in container
+    volumes:
+      - ./:/app
+
+  db:
+    image: postgis/postgis:15-3.4 # PostGIS-enabled Postgres image
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # optional: expose DB to host (useful for QGIS/pgAdmin)
+
+volumes:
+  postgres_data:

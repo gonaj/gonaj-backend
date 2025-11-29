@@ -1,0 +1,15 @@
+[project]
+name = "gonaj-backend"
+version = "0.1.0"
+requires-python = ">=3.14"
+description = "Crowd-sourced GTFS portal backend (Django + PostGIS + uv)"
+dependencies = [
+    "Django==5.2.8",
+    "djangorestframework",
+    "psycopg2-binary",
+]
+
+[tool.uv]
+[tool.uv.dependency-groups]
+
+
