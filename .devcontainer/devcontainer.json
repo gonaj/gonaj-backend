@@ -1,0 +1,68 @@
+{
+    "name": "Gonaj Django Backend",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "web",
+    "workspaceFolder": "/app",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/app/.venv/bin/python",
+                "python.linting.enabled": true,
+                "python.linting.pylintEnabled": false,
+                "python.linting.flake8Enabled": true,
+                "python.formatting.provider": "black",
+                "python.terminal.activateEnvironment": false,
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.black-formatter",
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                },
+                "files.exclude": {
+                    "**/__pycache__": true,
+                    "**/*.pyc": true,
+                    "**/.pytest_cache": true
+                }
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "charliermarsh.ruff",
+                "ms-azuretools.vscode-docker",
+                "humao.rest-client",
+                "qwtel.sqlite-viewer"
+            ]
+        }
+    },
+    "overrideCommand": true,
+    "postCreateCommand": "uv sync",
+    "postAttachCommand": {
+        "server": "cd backend && uv run python manage.py runserver 0.0.0.0:8000"
+    },
+    "forwardPorts": [
+        8000,
+        5432
+    ],
+    "portsAttributes": {
+        "8000": {
+            "label": "Django App",
+            "onAutoForward": "notify"
+        },
+        "5432": {
+            "label": "PostgreSQL",
+            "onAutoForward": "silent"
+        }
+    },
+    "remoteEnv": {
+        "PYTHONPATH": "/app/backend",
+        "DJANGO_SETTINGS_MODULE": "backend.settings"
+    },
+    "remoteUser": "root",
+    "shutdownAction": "stopCompose",
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    }
+}
