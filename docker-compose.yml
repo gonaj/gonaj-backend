@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     env_file:
       - .env # load environment variables from .env
     environment:
@@ -19,7 +22,7 @@ services:
       - ./:/app
 
   db:
-    image: postgis/postgis:15-3.4 # PostGIS-enabled Postgres image
+    image: postgis/postgis:17-3.5 # PostGIS-enabled Postgres image
     restart: unless-stopped
     env_file:
       - .env

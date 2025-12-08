@@ -1,5 +1,9 @@
 # Makefile - developer shortcuts
-.PHONY: up down build logs shell migrate createsuper collectstatic test
+.PHONY: up down build logs shell migrate createsuper collectstatic test setup-user
+
+# Setup host user IDs (run this first for development)
+setup-user:
+	@./set-dev-user.sh
 
 # Build and bring up containers in foreground (use if you want logs)
 up:
