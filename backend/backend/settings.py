@@ -37,6 +37,8 @@ else:
         host.strip() for host in allowed_hosts_str.split(",") if host.strip()
     ]
 
+AUTH_USER_MODEL = "core.User"
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -46,6 +48,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.gis",  # GeoDjango
     "rest_framework",
+    "core",
     "api",
 ]
 
