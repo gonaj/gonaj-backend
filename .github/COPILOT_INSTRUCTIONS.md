@@ -260,7 +260,7 @@ Error: Incompatible dependencies
 
 ## Examples
 
-### ✅ Good Practice
+### ✅ Good Practice ( only for reference not to copy as it is)
 ```toml
 # User requests: "Add celery for background tasks"
 
