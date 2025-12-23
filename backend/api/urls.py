@@ -10,6 +10,7 @@ from .views.auth import (
     TokenRefreshView,
     TokenRevokeView,
 )
+from .views.contributions import ContributionSubmissionView
 
 # Authentication endpoints
 auth_urlpatterns = [
@@ -31,4 +32,13 @@ auth_urlpatterns = [
     ),
 ]
 
-urlpatterns = auth_urlpatterns
+# Contribution endpoints (Sprint-2)
+contribution_urlpatterns = [
+    path(
+        "v1/contributions/",
+        ContributionSubmissionView.as_view(),
+        name="contribution-submit"
+    ),
+]
+
+urlpatterns = auth_urlpatterns + contribution_urlpatterns
