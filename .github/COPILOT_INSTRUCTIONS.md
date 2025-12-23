@@ -3,7 +3,7 @@
 **Package Manager:** uv (modern Python package manager)
 
 ---
-
+## MANDATORY: Never use icons/emojies or special characters in code, strings or to show logs.
 ## MANDATORY: Always Use Latest Stable Versions
 
 When adding ANY new dependency or library to this project, you MUST:
