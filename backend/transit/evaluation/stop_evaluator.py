@@ -2,6 +2,7 @@
 Stop evaluator scaffolding and canonical write gateway.
 
 Sprint-4A: Evaluation Scaffolding and Determinism
+Sprint-4C: Stop Creation & Initial Belief
 
 This module provides:
 - StopWriteGateway: Controlled pathway for canonical Stop writes
@@ -11,23 +12,26 @@ WHAT THIS MODULE PROVIDES:
 - Deterministic evidence processing for Stop-related contributions
 - Single controlled pathway for Stop writes
 - Incremental and full evaluation hooks
+- Integration with aggregation and creation pipelines (Sprint-4C)
 
-WHAT THIS MODULE DOES NOT PROVIDE (Sprint-4A):
-- Stop creation logic
-- Confidence calculations
-- Decay logic
-- Spatial clustering or thresholds
-- Any semantic evaluation decisions
+WHAT THIS MODULE DOES NOT PROVIDE:
+- Confidence decay logic
+- Negative evidence semantics
+- Merge/split logic
 
 INVARIANTS ENFORCED:
 - INV-A1: No evidence loss
 - INV-A2: Evidence immutability
 - INV-B1: Deterministic evaluation
 - INV-B2: Replay equivalence
+- INV-C1: No single-event creation
+- INV-C2: Independence requirement
+- INV-C3: Spatial convergence
+- INV-H1: Sub-threshold belief not public
 - INV-I2: Canonical write protection (all writes via gateway)
 """
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from core.models import ContributionEvent
@@ -35,6 +39,7 @@ from django.db import transaction
 from transit.models import Stop
 
 from .base import BaseEvaluator, EvaluationContext, EvaluationResult
+from .stop_aggregation import AggregationResult, StopEvidenceAggregator
 
 
 class StopWriteGateway:
@@ -47,26 +52,15 @@ class StopWriteGateway:
     canonical Stop records may be written. Direct .save() on Stop
     models should not be used elsewhere in the codebase.
 
-    Sprint-4A Note:
-    This gateway exists as scaffolding. It performs minimal work
-    in this sprint but establishes the pattern for future
-    evaluation logic to follow.
-
     RESPONSIBILITIES:
     - Enforce that all Stop writes go through one explicit method
-    - Provide hooks for future write validation
+    - Provide hooks for write validation
     - Track writes for audit and result reporting
+    - Set evaluation metadata (ruleset_version, evidence_refs)
 
-    FUTURE RESPONSIBILITIES (not in Sprint-4A):
-    - Enforce invariants before writes
-    - Apply confidence calculations
-    - Handle version management
     CONSTRAINTS (Phase-1):
-    - This gateway must not perform semantic evaluation, threshold
-      checks, confidence math, or belief decisions before Sprint-4C.
-    IMPORTANT:
-    - No semantic decisions are permitted in this gateway until
-      Sprint-4C. Any such logic is a Phase-1 violation.
+    - No semantic decisions are permitted in this gateway
+    - All semantic decisions (gates, threshold) happen in stop_creation.py
     """
 
     def __init__(self, context: EvaluationContext):
@@ -190,12 +184,11 @@ class StopEvaluator(BaseEvaluator):
     - INV-A2: Evidence is never mutated
     - INV-B1: Output is deterministic for identical input
     - INV-B2: Incremental and batch evaluation converge
+    - INV-C1: No single-event creation
+    - INV-C2: Independence requirement
+    - INV-C3: Spatial convergence
+    - INV-H1: Sub-threshold belief not public
     - INV-I2: All writes go through the gateway
-
-    Sprint-4A Note:
-    This evaluator provides scaffolding only. No semantic
-    evaluation logic (stop creation, confidence, decay) is
-    implemented in this sprint.
     """
 
     # Contribution types relevant to Stop evaluation
@@ -215,11 +208,17 @@ class StopEvaluator(BaseEvaluator):
         """
         super().__init__(context)
         self._write_gateway = StopWriteGateway(context)
+        self._aggregator = StopEvidenceAggregator()
 
     @property
     def write_gateway(self) -> StopWriteGateway:
         """Get the write gateway for this evaluator."""
         return self._write_gateway
+
+    @property
+    def aggregator(self) -> StopEvidenceAggregator:
+        """Get the evidence aggregator for this evaluator."""
+        return self._aggregator
 
     def filter_stop_evidence(
         self, evidence: Sequence[ContributionEvent]
@@ -367,14 +366,10 @@ class StopEvaluator(BaseEvaluator):
         """
         Process a single evidence event.
 
-        Sprint-4A Note:
-        This is scaffolding only. The method:
+        This method:
         - Records that the event was processed (INV-A1)
-        - Does NOT make any semantic decisions
-        - Does NOT create or modify Stops
-        - Does NOT calculate confidence
-
-        Future sprints will add evaluation logic here.
+        - Does NOT create or modify Stops directly
+        - Creation logic is in evaluate_with_creation()
 
         Args:
             event: The ContributionEvent to process
@@ -382,12 +377,60 @@ class StopEvaluator(BaseEvaluator):
         # Record that this evidence was processed (INV-A1)
         self._result.add_processed_evidence(event.id)
 
-        # Sprint-4A: No semantic processing
-        # Future sprints will add:
-        # - Spatial clustering
-        # - Confidence calculation
-        # - Stop creation/update logic
-        # - Decay handling
+    def evaluate_with_creation(
+        self,
+        evidence: Sequence[ContributionEvent],
+    ) -> Tuple[EvaluationResult, List[Stop], List["CreationDecision"]]:
+        """
+        Evaluate evidence and create Stops when conditions are met.
+
+        This is the full evaluation pipeline that:
+        1. Processes evidence (tracking, immutability check)
+        2. Aggregates evidence into spatial clusters
+        3. Evaluates structural gates for each cluster
+        4. Evaluates threshold for clusters passing gates
+        5. Creates canonical Stops via gateway
+
+        INV-B1: Deterministic evaluation
+        INV-B2: Replay equivalence
+        INV-C1: No single-event creation
+        INV-C2: Independence requirement
+        INV-C3: Spatial convergence
+        INV-H1: Sub-threshold belief not public
+        INV-I2: Canonical write protection
+
+        Args:
+            evidence: Collection of ContributionEvent records
+
+        Returns:
+            Tuple of (EvaluationResult, created_stops, all_decisions)
+        """
+        # Import here to avoid circular imports
+        from .stop_creation import CreationDecision, StopCreationPipeline
+
+        # First, run the base evaluation (tracking, sorting, INV-A2)
+        result = self.evaluate(evidence)
+
+        # Filter to stop evidence for aggregation
+        stop_evidence = self.filter_stop_evidence(evidence)
+
+        if not stop_evidence:
+            return result, [], []
+
+        # Aggregate evidence into spatial clusters
+        aggregation_result = self._aggregator.aggregate(
+            stop_evidence,
+            self.context.evaluation_time,
+        )
+
+        # Run the creation pipeline
+        creation_pipeline = StopCreationPipeline(self.context, self._write_gateway)
+        created_stops, decisions = creation_pipeline.create_stops(aggregation_result)
+
+        # Update result with write count
+        result.canonical_writes = self._write_gateway.write_count
+
+        return result, created_stops, decisions
 
     def get_stop_evidence_queryset(self):
         """
