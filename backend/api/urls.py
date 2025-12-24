@@ -37,7 +37,7 @@ contribution_urlpatterns = [
     path(
         "v1/contributions/",
         ContributionSubmissionView.as_view(),
-        name="contribution-submit"
+        name="contribution-submit",
     ),
 ]
 

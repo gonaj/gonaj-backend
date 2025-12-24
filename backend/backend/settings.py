@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "core",
     "api",
     "accounts",
+    "transit",
 ]
 
 SITE_ID = 1
