@@ -2,35 +2,43 @@
 Stop creation logic with structural gates and belief threshold.
 
 Sprint-4C: Stop Creation & Initial Belief (Rules v0)
+Sprint-4D: Negative Evidence & Conflict Handling (Rules v0)
 
 This module provides:
 - StructuralGateResult: Immutable result of gate evaluation
 - StructuralGateEvaluator: Hard precondition checks for Stop creation
 - ThresholdEvaluator: Belief threshold evaluation (gated by structural checks)
 - StopCreator: Canonical Stop creation via gateway
+- Negative evidence threshold adjustment (Sprint-4D)
 
 ARCHITECTURE:
 
     STRUCTURAL GATES (hard)
             |
             v
-    BELIEF THRESHOLD (gated)
+    BELIEF THRESHOLD (gated, adjusted for negative evidence)
             |
             v
     CANONICAL STOP (created)
 
 Both stages are required. Neither alone is sufficient.
 
+Sprint-4D Extension:
+- Negative evidence may RAISE threshold (never blocks creation)
+- Threshold adjustment is capped and conservative
+- No amount of negative evidence permanently vetoes creation
+
 WHAT THIS MODULE PROVIDES:
 - Deterministic structural gate evaluation
 - Threshold-based belief evaluation
 - Canonical Stop creation via StopWriteGateway
+- Negative evidence threshold adjustment (Sprint-4D)
 
 WHAT THIS MODULE DOES NOT PROVIDE:
 - Confidence decay logic
-- Negative evidence semantics
 - Merge/split logic
 - Threshold tuning per region/operator
+- Stop deletion logic
 
 INVARIANTS ENFORCED:
 - INV-B1: Deterministic evaluation
@@ -40,6 +48,7 @@ INVARIANTS ENFORCED:
 - INV-C3: Spatial convergence
 - INV-H1: Sub-threshold belief not public
 - INV-I2: Canonical write protection
+- INV-E3: Negative evidence modulates thresholds only (Sprint-4D)
 """
 
 from dataclasses import dataclass
@@ -47,6 +56,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
+from core.models import ContributionEvent
 from django.contrib.gis.geos import Point
 from transit.models import Stop
 
@@ -434,15 +444,30 @@ class ThresholdEvaluator:
     - Evaluated after gates (never before)
     - Deterministic
     - Conservative (biased toward false negatives)
+    - Adjusted upward when negative evidence exists (Sprint-4D)
+
+    Sprint-4D Extension:
+    Negative evidence may raise the threshold, making creation harder
+    but never impossible. This ensures INV-E3: negative evidence
+    modulates thresholds only, never blocks creation permanently.
 
     INVARIANTS ENFORCED:
     - INV-H1: Sub-threshold belief not public
     - INV-B1: Deterministic evaluation
+    - INV-E3: Negative evidence modulates thresholds only (Sprint-4D)
     """
 
-    # Threshold for Stop creation (Rules v0)
+    # Base threshold for Stop creation (Rules v0)
     # This is conservative - requires substantial weighted evidence
-    CREATION_THRESHOLD = 2.0
+    BASE_CREATION_THRESHOLD = 2.0
+
+    # Maximum threshold adjustment from negative evidence (Sprint-4D)
+    # Negative evidence can raise threshold by at most this amount
+    MAX_NEGATIVE_ADJUSTMENT = 1.0
+
+    # Negative evidence adjustment factor (Sprint-4D)
+    # Applied to negative evidence score to compute adjustment
+    NEGATIVE_ADJUSTMENT_FACTOR = 0.5
 
     def __init__(self, evaluation_time: datetime):
         """
@@ -454,17 +479,26 @@ class ThresholdEvaluator:
         self._evaluation_time = evaluation_time
 
     def evaluate_threshold(
-        self, cluster: SpatialCluster, gate_result: StructuralGateResult
+        self,
+        cluster: SpatialCluster,
+        gate_result: StructuralGateResult,
+        negative_weighted_score: float = 0.0,
     ) -> Optional[ThresholdResult]:
         """
         Evaluate belief threshold for a cluster.
 
         INV-H1: This evaluation only occurs if gates passed.
         INV-B1: Evaluation is deterministic.
+        INV-E3: Negative evidence raises threshold but never blocks (Sprint-4D).
+
+        Sprint-4D Extension:
+        If negative evidence exists, the threshold is raised by a capped
+        amount. This makes creation harder but not impossible.
 
         Args:
             cluster: Spatial cluster to evaluate
             gate_result: Result of structural gate evaluation
+            negative_weighted_score: Weighted score of negative evidence (Sprint-4D)
 
         Returns:
             ThresholdResult if gates passed, None if gates failed
@@ -473,27 +507,67 @@ class ThresholdEvaluator:
         if not gate_result.all_gates_passed:
             return None
 
+        # Compute adjusted threshold (Sprint-4D)
+        threshold = self._compute_adjusted_threshold(negative_weighted_score)
+
         weighted_score = cluster.weighted_evidence_score
-        threshold_crossed = weighted_score >= self.CREATION_THRESHOLD
+        threshold_crossed = weighted_score >= threshold
 
         if threshold_crossed:
             reason = (
                 f"Threshold crossed: weighted score {weighted_score:.2f} "
-                f">= {self.CREATION_THRESHOLD}"
+                f">= {threshold:.2f}"
             )
+            if negative_weighted_score > 0:
+                reason += (
+                    f" (threshold raised by {threshold - self.BASE_CREATION_THRESHOLD:.2f} "
+                    f"due to negative evidence)"
+                )
         else:
             reason = (
                 f"Threshold not crossed: weighted score {weighted_score:.2f} "
-                f"< {self.CREATION_THRESHOLD}"
+                f"< {threshold:.2f}"
             )
+            if negative_weighted_score > 0:
+                reason += (
+                    f" (threshold raised by {threshold - self.BASE_CREATION_THRESHOLD:.2f} "
+                    f"due to negative evidence)"
+                )
 
         return ThresholdResult(
             threshold_crossed=threshold_crossed,
             weighted_score=weighted_score,
-            required_threshold=self.CREATION_THRESHOLD,
+            required_threshold=threshold,
             reason=reason,
             evaluation_time=self._evaluation_time,
         )
+
+    def _compute_adjusted_threshold(self, negative_weighted_score: float) -> float:
+        """
+        Compute threshold adjusted for negative evidence.
+
+        Sprint-4D: Negative evidence raises the threshold, making
+        creation harder but not impossible.
+
+        INV-E3: This adjustment is capped. No amount of negative
+        evidence can raise threshold infinitely.
+
+        Args:
+            negative_weighted_score: Weighted score of negative evidence
+
+        Returns:
+            Adjusted threshold (always >= BASE_CREATION_THRESHOLD)
+        """
+        if negative_weighted_score <= 0:
+            return self.BASE_CREATION_THRESHOLD
+
+        # Compute adjustment (capped)
+        adjustment = min(
+            negative_weighted_score * self.NEGATIVE_ADJUSTMENT_FACTOR,
+            self.MAX_NEGATIVE_ADJUSTMENT,
+        )
+
+        return self.BASE_CREATION_THRESHOLD + adjustment
 
 
 # =============================================================================
@@ -535,14 +609,18 @@ class StopCreator:
         self,
         cluster: SpatialCluster,
         evaluation_time: datetime,
+        negative_weighted_score: float = 0.0,
     ) -> CreationDecision:
         """
         Evaluate a cluster and decide whether to create a Stop.
 
         This method runs the full evaluation pipeline:
         1. Evaluate structural gates
-        2. If gates pass, evaluate threshold
+        2. If gates pass, evaluate threshold (with negative evidence adjustment)
         3. Return decision
+
+        Sprint-4D Extension:
+        Negative evidence may raise the threshold but never blocks creation.
 
         No Stop is created by this method - it only returns the decision.
         Use create_stop() to actually create the Stop.
@@ -550,6 +628,7 @@ class StopCreator:
         Args:
             cluster: Spatial cluster to evaluate
             evaluation_time: Timestamp for this evaluation
+            negative_weighted_score: Weighted score of negative evidence (Sprint-4D)
 
         Returns:
             CreationDecision with complete evaluation results
@@ -559,9 +638,10 @@ class StopCreator:
         structural_result = gate_evaluator.evaluate_all_gates(cluster)
 
         # Step 2: Evaluate threshold (only if gates passed)
+        # Sprint-4D: Pass negative evidence score for threshold adjustment
         threshold_evaluator = ThresholdEvaluator(evaluation_time)
         threshold_result = threshold_evaluator.evaluate_threshold(
-            cluster, structural_result
+            cluster, structural_result, negative_weighted_score
         )
 
         # Step 3: Determine creation decision
@@ -624,6 +704,7 @@ class StopCreator:
             location=Point(cluster.centroid_lon, cluster.centroid_lat, srid=4326),
             structural_confidence=self.INITIAL_STRUCTURAL_CONFIDENCE,
             freshness_confidence=self.INITIAL_FRESHNESS_CONFIDENCE,
+            belief_state=Stop.BeliefState.PROPOSED,  # Sprint-4D: Initial belief state
             properties={
                 "creation_reason": decision.reason,
                 "cluster_id": cluster.cluster_id,
@@ -655,6 +736,11 @@ class StopCreationPipeline:
     3. Create Stops for qualifying clusters
     4. Return creation results
 
+    Sprint-4D Extension:
+    - Analyze negative evidence for each cluster
+    - Adjust threshold based on negative evidence
+    - Negative evidence never blocks creation (INV-E3)
+
     This is the primary entry point for Stop creation logic.
 
     INVARIANTS ENFORCED:
@@ -665,6 +751,7 @@ class StopCreationPipeline:
     - INV-C3: Spatial convergence
     - INV-H1: Sub-threshold belief not public
     - INV-I2: Canonical write protection
+    - INV-E3: Negative evidence modulates thresholds only (Sprint-4D)
     """
 
     def __init__(self, context: EvaluationContext, write_gateway: StopWriteGateway):
@@ -682,30 +769,55 @@ class StopCreationPipeline:
     def process_aggregation_result(
         self,
         aggregation_result: AggregationResult,
+        negative_contributions: Optional[List[ContributionEvent]] = None,
     ) -> List[CreationDecision]:
         """
         Process aggregation results and decide on Stop creation.
 
         This method:
         1. Evaluates each cluster from the aggregation
-        2. Returns creation decisions for all clusters
+        2. Analyzes negative evidence for each cluster (Sprint-4D)
+        3. Returns creation decisions for all clusters
 
         Does NOT create Stops - use create_stops() for that.
 
         INV-B1: Processing is deterministic.
+        INV-E3: Negative evidence adjusts threshold, never blocks (Sprint-4D).
 
         Args:
             aggregation_result: Result from StopEvidenceAggregator
+            negative_contributions: List of negative evidence (Sprint-4D)
 
         Returns:
             List of CreationDecision for each cluster
         """
+        # Import here to avoid circular imports
+        from .stop_negative_evidence import NegativeEvidenceAnalyzer
+
         decisions = []
+        negative_contributions = negative_contributions or []
+
+        # Initialize negative evidence analyzer if needed
+        analyzer = None
+        if negative_contributions:
+            analyzer = NegativeEvidenceAnalyzer()
 
         for cluster in aggregation_result.clusters:
+            # Analyze negative evidence for this cluster (Sprint-4D)
+            negative_weighted_score = 0.0
+            if analyzer:
+                neg_result = analyzer.analyze_negative_evidence(
+                    cluster,
+                    negative_contributions,
+                    self._context.evaluation_time,
+                )
+                negative_weighted_score = neg_result.negative_weighted_score
+
+            # Evaluate and decide (with negative evidence adjustment)
             decision = self._stop_creator.evaluate_and_decide(
                 cluster,
                 self._context.evaluation_time,
+                negative_weighted_score,
             )
             decisions.append(decision)
 
@@ -714,6 +826,7 @@ class StopCreationPipeline:
     def create_stops(
         self,
         aggregation_result: AggregationResult,
+        negative_contributions: Optional[List[ContributionEvent]] = None,
         derive_names: bool = False,
     ) -> Tuple[List[Stop], List[CreationDecision]]:
         """
@@ -722,15 +835,19 @@ class StopCreationPipeline:
         This is the main entry point for Stop creation.
 
         INV-I2: All writes go through StopWriteGateway.
+        INV-E3: Negative evidence adjusts threshold, never blocks (Sprint-4D).
 
         Args:
             aggregation_result: Result from StopEvidenceAggregator
+            negative_contributions: List of negative evidence (Sprint-4D)
             derive_names: Whether to derive names from evidence (placeholder)
 
         Returns:
             Tuple of (created_stops, all_decisions)
         """
-        decisions = self.process_aggregation_result(aggregation_result)
+        decisions = self.process_aggregation_result(
+            aggregation_result, negative_contributions
+        )
         created_stops = []
 
         for decision in decisions:

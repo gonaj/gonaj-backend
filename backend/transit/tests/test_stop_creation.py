@@ -36,14 +36,24 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TestCase
 from django.utils import timezone
-from transit.evaluation import (AggregationResult, CreationDecision,
-                                EvaluationContext, EvidenceTypeBreakdown,
-                                EvidenceWeight, GateResult, SpatialCluster,
-                                StopCreationPipeline, StopCreator,
-                                StopEvaluator, StopWriteGateway,
-                                StructuralGateEvaluator, StructuralGateResult,
-                                TemporalSpan, ThresholdEvaluator,
-                                ThresholdResult)
+from transit.evaluation import (
+    AggregationResult,
+    CreationDecision,
+    EvaluationContext,
+    EvidenceTypeBreakdown,
+    EvidenceWeight,
+    GateResult,
+    SpatialCluster,
+    StopCreationPipeline,
+    StopCreator,
+    StopEvaluator,
+    StopWriteGateway,
+    StructuralGateEvaluator,
+    StructuralGateResult,
+    TemporalSpan,
+    ThresholdEvaluator,
+    ThresholdResult,
+)
 from transit.models import Stop
 
 User = get_user_model()
@@ -97,7 +107,9 @@ def create_test_cluster(
 ) -> SpatialCluster:
     """Create a SpatialCluster for testing."""
     base_time = timezone.now().replace(hour=earliest_hour, minute=0, second=0)
-    latest_time = base_time.replace(hour=latest_hour) + timedelta(days=distinct_days - 1)
+    latest_time = base_time.replace(hour=latest_hour) + timedelta(
+        days=distinct_days - 1
+    )
 
     # Generate contributor IDs
     contributor_ids = frozenset(uuid4() for _ in range(contributor_count))
@@ -316,7 +328,7 @@ class StructuralGateEvaluatorTests(TestCase):
         """
         cluster = create_test_cluster(
             earliest_hour=2,  # 2 AM
-            latest_hour=3,    # 3 AM
+            latest_hour=3,  # 3 AM
         )
 
         result = self.evaluator.evaluate_all_gates(cluster)
@@ -863,29 +875,35 @@ class StopCreationIntegrationTests(TestCase):
 
         # Create evidence that will create a Stop
         events = []
-        events.append(create_contribution_event(
-            user=self.users[0],
-            contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
-            lat=40.7128,
-            lon=-74.0060,
-            observed_at=base_time,
-        ))
+        events.append(
+            create_contribution_event(
+                user=self.users[0],
+                contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
+                lat=40.7128,
+                lon=-74.0060,
+                observed_at=base_time,
+            )
+        )
 
-        events.append(create_contribution_event(
-            user=self.users[1],
-            contribution_type=ContributionEvent.ContributionType.STOP_NAME,
-            lat=40.7128,
-            lon=-74.0060,
-            observed_at=base_time + timedelta(days=1),
-        ))
+        events.append(
+            create_contribution_event(
+                user=self.users[1],
+                contribution_type=ContributionEvent.ContributionType.STOP_NAME,
+                lat=40.7128,
+                lon=-74.0060,
+                observed_at=base_time + timedelta(days=1),
+            )
+        )
 
-        events.append(create_contribution_event(
-            user=self.users[2],
-            contribution_type=ContributionEvent.ContributionType.STOP_LOCATION,
-            lat=40.7129,
-            lon=-74.0061,
-            observed_at=base_time + timedelta(days=1),
-        ))
+        events.append(
+            create_contribution_event(
+                user=self.users[2],
+                contribution_type=ContributionEvent.ContributionType.STOP_LOCATION,
+                lat=40.7129,
+                lon=-74.0061,
+                observed_at=base_time + timedelta(days=1),
+            )
+        )
 
         # Batch evaluation
         batch_context = EvaluationContext(
@@ -895,8 +913,8 @@ class StopCreationIntegrationTests(TestCase):
         batch_evaluator = StopEvaluator(batch_context)
         batch_evidence = ContributionEvent.objects.all()
 
-        batch_result, batch_stops, batch_decisions = batch_evaluator.evaluate_with_creation(
-            batch_evidence
+        batch_result, batch_stops, batch_decisions = (
+            batch_evaluator.evaluate_with_creation(batch_evidence)
         )
 
         # The key assertion is that both produce the same number of stops
@@ -995,7 +1013,9 @@ class InvariantRegressionTests(TestCase):
         result, created_stops, decisions = evaluator.evaluate_with_creation(evidence)
 
         # Must not create a Stop
-        self.assertEqual(len(created_stops), 0, "INV-C1 violated: single event created Stop")
+        self.assertEqual(
+            len(created_stops), 0, "INV-C1 violated: single event created Stop"
+        )
 
     def test_inv_c2_same_user_repetition_insufficient(self):
         """
@@ -1008,11 +1028,13 @@ class InvariantRegressionTests(TestCase):
         evaluation_time = timezone.now()
 
         # Multiple events from same user
-        for i, etype in enumerate([
-            ContributionEvent.ContributionType.STOP_EXISTS,
-            ContributionEvent.ContributionType.STOP_NAME,
-            ContributionEvent.ContributionType.STOP_LOCATION,
-        ]):
+        for i, etype in enumerate(
+            [
+                ContributionEvent.ContributionType.STOP_EXISTS,
+                ContributionEvent.ContributionType.STOP_NAME,
+                ContributionEvent.ContributionType.STOP_LOCATION,
+            ]
+        ):
             create_contribution_event(
                 user=user,
                 contribution_type=etype,
@@ -1032,8 +1054,7 @@ class InvariantRegressionTests(TestCase):
 
         # Must not create a Stop
         self.assertEqual(
-            len(created_stops), 0,
-            "INV-C2 violated: same-user repetition created Stop"
+            len(created_stops), 0, "INV-C2 violated: same-user repetition created Stop"
         )
 
     def test_inv_h1_sub_threshold_not_creates_stop(self):
@@ -1130,7 +1151,7 @@ class InvariantRegressionTests(TestCase):
         gateway_writes = final_gateway_writes - initial_gateway_writes
 
         self.assertEqual(
-            db_writes, gateway_writes,
-            f"INV-I2 violated: DB writes ({db_writes}) != gateway writes ({gateway_writes})"
-        )
+            db_writes,
+            gateway_writes,
+            f"INV-I2 violated: DB writes ({db_writes}) != gateway writes ({gateway_writes})",
         )

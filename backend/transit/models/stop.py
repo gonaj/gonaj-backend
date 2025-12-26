@@ -40,6 +40,7 @@ class Stop(CanonicalModel):
     - name: Primary name of the stop
     - location: Geographic point (lat/lon)
     - alternate_names: JSON array of alternate names observed
+    - belief_state: Human-legible projection of confidence (Sprint-4D)
     - properties: Flexible JSON for additional attributes
 
     RELATIONSHIPS (deferred to Sprint-3+):
@@ -55,6 +56,27 @@ class Stop(CanonicalModel):
 
     This model has NO evaluation logic - it is populated by external processes.
     """
+
+    # === Belief States (Sprint-4D) ===
+
+    class BeliefState(models.TextChoices):
+        """
+        Human-legible projection of Stop confidence.
+
+        Sprint-4D: Derived Contested state represents conflict.
+
+        PROPOSED: Newly created, fragile belief
+        ACTIVE_LOW: Exists but uncertain
+        ACTIVE_HIGH: Stable, reinforced belief
+        CONTESTED: Conflicting evidence present (negative + positive)
+        DORMANT: Belief exists but is outdated
+        """
+
+        PROPOSED = "proposed", "Proposed"
+        ACTIVE_LOW = "active_low", "Active (Low Confidence)"
+        ACTIVE_HIGH = "active_high", "Active (High Confidence)"
+        CONTESTED = "contested", "Contested"
+        DORMANT = "dormant", "Dormant"
 
     # === Domain-specific Fields ===
 
@@ -82,6 +104,17 @@ class Stop(CanonicalModel):
             "Array of alternate names observed for this stop. "
             "Format: [{'name': 'Main St', 'confidence': 0.7}, ...] "
             "Populated by evaluation logic from stop_name contributions."
+        ),
+    )
+
+    belief_state = models.CharField(
+        max_length=20,
+        choices=BeliefState.choices,
+        default=BeliefState.PROPOSED,
+        help_text=(
+            "Human-legible projection of Stop confidence (Sprint-4D). "
+            "Derived from structural_confidence, freshness_confidence, "
+            "and presence of negative evidence. Not a workflow state."
         ),
     )
 
