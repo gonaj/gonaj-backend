@@ -45,7 +45,7 @@ class CanonicalModelBaseTests(TestCase):
         # Get field names from a concrete model that inherits from CanonicalModel
         field_names = [field.name for field in Stop._meta.get_fields()]
 
-        # Required fields per PHASE_1_BACKEND_PLAN.md
+        # Required fields per phase_1_backend_plan.md
         required_fields = [
             "id",
             "public_id",

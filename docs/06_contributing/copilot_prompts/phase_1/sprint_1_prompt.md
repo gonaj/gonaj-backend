@@ -12,11 +12,11 @@ This document is intended to be provided **as-is** to the GitHub Copilot Agent i
 
 The following documents must be considered authoritative:
 
-* `BACKEND_PHILOSOPHY.md`
-* `Discussion_Summary.md`
-* `PHASE_1_BACKEND_PLAN.md`
+* `backend_philosophy.md`
+* `discussion_summary.md`
+* `phase_1_backend_plan.md`
 
-If there is any conflict, `PHASE_1_BACKEND_PLAN.md` takes precedence.
+If there is any conflict, `phase_1_backend_plan.md` takes precedence.
 
 ---
 
@@ -55,7 +55,7 @@ Current high-level structure (relevant parts):
 
 ## 🧭 Context & Non-Negotiable Rules
 
-You are implementing **Sprint-1 of Phase-1**, as defined in `PHASE_1_BACKEND_PLAN.md`.
+You are implementing **Sprint-1 of Phase-1**, as defined in `phase_1_backend_plan.md`.
 
 This sprint corresponds to **Phase-1 Implementation Order steps 1 and 2**:
 
@@ -205,5 +205,5 @@ Sprint-1 is complete **only when**:
 
 ## 📎 Final Instruction to the Agent
 
-> If any requested change conflicts with `BACKEND_PHILOSOPHY.md` or violates an invariant from `PHASE_1_BACKEND_PLAN.md`, **do not implement it**.
+> If any requested change conflicts with `backend_philosophy.md` or violates an invariant from `phase_1_backend_plan.md`, **do not implement it**.
 > Instead, explain why the change would be unsafe.

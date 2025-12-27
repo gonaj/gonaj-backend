@@ -75,7 +75,7 @@ class ContributionEvent(ImmutableModel):
 
     # Contribution type choices
     # These are the ONLY contribution types allowed in Phase-1
-    # Explicitly limited per PHASE_1_BACKEND_PLAN.md
+    # Explicitly limited per phase_1_backend_plan.md
     class ContributionType(models.TextChoices):
         STOP_NAME = "stop_name", "Stop Name Correction"
         STOP_EXISTS = "stop_exists", "Stop Existence Confirmation"

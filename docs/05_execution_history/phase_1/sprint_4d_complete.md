@@ -146,7 +146,7 @@ OK
 
 ## Invariants Satisfied
 
-This implementation satisfies all blocking invariants from `TEST_INVARIANTS_V0.md`:
+This implementation satisfies all blocking invariants from `test_invariants_v0.md`:
 
 ### INV-E1 — No Deletion via Negative Evidence
 
@@ -258,7 +258,7 @@ All existing evaluation logic from prior sprints remains unchanged and functiona
   - Invariant compliance verification
 
 - **Human Contribution:** ~5%
-  - Sprint scope definition (`SPRINT_4D_COPILOT_AGENT_PROMPT.md`)
+  - Sprint scope definition (`docs/06_contributing/copilot_prompts/phase_1/sprint_4d_prompt.md`)
   - Architectural guidance via reference documents
   - Final review and approval (not yet performed)
 

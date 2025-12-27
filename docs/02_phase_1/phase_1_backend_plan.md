@@ -5,7 +5,7 @@
 
 This plan is derived from:
 
-* BACKEND_PHILOSOPHY.md (constitutional principles)
+* backend_philosophy.md (constitutional principles)
 * CONTRIBUTING.md (contributor rules)
 * Phase-1 implementation order & sprint breakdown discussions
 
@@ -29,7 +29,7 @@ Phase-1 is successful **only if**:
 
 ## 2. Non-Negotiable Invariants
 
-These invariants come directly from `BACKEND_PHILOSOPHY.md` and must never be violated.
+These invariants come directly from `backend_philosophy.md` and must never be violated.
 
 1. **Contributions are append-only**
    Evidence is never overwritten or deleted.

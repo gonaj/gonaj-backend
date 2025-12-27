@@ -12,17 +12,17 @@ This document is intended to be provided **as-is** to the GitHub Copilot Agent i
 
 The following documents must be considered authoritative:
 
-* `BACKEND_PHILOSOPHY.md`
-* `Discussion_Summary.md`
-* `PHASE_1_BACKEND_PLAN.md`
+* `backend_philosophy.md`
+* `discussion_summary.md`
+* `phase_1_backend_plan.md`
 
-If there is any conflict, `PHASE_1_BACKEND_PLAN.md` takes precedence.
+If there is any conflict, `phase_1_backend_plan.md` takes precedence.
 
 ---
 
 ## 🧭 Context & Non-Negotiable Rules
 
-You are implementing **Sprint-3 of Phase-1**, as defined in `PHASE_1_BACKEND_PLAN.md`.
+You are implementing **Sprint-3 of Phase-1**, as defined in `phase_1_backend_plan.md`.
 
 This sprint corresponds to **Phase-1 Implementation Order step 4**:
 
@@ -196,7 +196,7 @@ After completing implementation:
 
 1. **Create a completion document** at:
 
-   * `docs/phase-1_sprints/PHASE_1_SPRINT_3_COMPLETE.md`
+   * `docs/05_execution_history/phase_1/sprint_3_complete.md`
 
 2. The document **must include**:
 
@@ -216,5 +216,5 @@ Include a dedicated section titled **`Implementation Metadata`** containing:
 * **Human vs AI Contribution Split**
 * **Date Range of Implementation**
 
-> If any requested change conflicts with `BACKEND_PHILOSOPHY.md` or violates an invariant from `PHASE_1_BACKEND_PLAN.md`, **do not implement it**.
+> If any requested change conflicts with `docs/01_architecture/backend_philosophy.md` or violates an invariant from `docs/02_phase_1/phase_1_backend_plan.md`, **do not implement it**.
 > Instead, explain why the change would be unsafe.

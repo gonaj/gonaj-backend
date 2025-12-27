@@ -15,7 +15,7 @@ This base class provides the required metadata fields that enable:
 - Confidence tracking
 - Rule evolution
 
-CRITICAL INVARIANTS (from BACKEND_PHILOSOPHY.md):
+CRITICAL INVARIANTS (from backend_philosophy.md):
 - Canonical data is derived, not edited
 - All decisions are reversible
 - Canonical tables exist for efficiency, not authority
@@ -47,7 +47,7 @@ class CanonicalModel(models.Model):
     - A model with business logic (in Sprint-3)
 
     REQUIRED FIELDS:
-    All fields below are required by PHASE_1_BACKEND_PLAN.md for canonical entities:
+    All fields below are required by phase_1_backend_plan.md for canonical entities:
     - id: UUID primary key
     - public_id: Stable, opaque identifier for external use
     - version: Integer version number

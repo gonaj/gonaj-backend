@@ -7,7 +7,7 @@ This module defines foundational patterns that enforce Phase-1 invariants:
 2. ImmutableModel - Enforces append-only pattern, prevents updates
 3. VersionedModel - Provides temporal versioning foundation
 
-CRITICAL INVARIANTS (from BACKEND_PHILOSOPHY.md):
+CRITICAL INVARIANTS (from backend_philosophy.md):
 - Nothing is ever deleted (data fades through decay, not deletion)
 - Contributions are append-only
 - Truth is versioned and temporal

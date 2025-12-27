@@ -12,10 +12,10 @@ This document is intended to be provided **as-is** to the GitHub Copilot Agent i
 
 The following documents must be considered authoritative and loaded into context:
 
-* `BACKEND_PHILOSOPHY.md`
-* `PHASE_1_BACKEND_PLAN.md`
-* `RULES_V0_CONTEXT.md`
-* `TEST_INVARIANTS_V0.md`
+* `backend_philosophy.md`
+* `phase_1_backend_plan.md`
+* `rules_v0_context.md`
+* `test_invariants_v0.md`
 
 If any conflict exists, **architectural invariants and Rules v0 take precedence over implementation convenience**.
 
@@ -191,7 +191,7 @@ After completing implementation:
 
 1. Create a completion document at:
 
-   * `docs/phase-1_sprints/PHASE_1_SPRINT_4A_COMPLETE.md`
+   * `docs/05_execution_history/phase_1/sprint_4a_complete.md`
 
 2. The document must include:
 
@@ -210,5 +210,5 @@ Include a section titled **`Implementation Metadata`** with:
 * Human vs AI contribution split
 * Date range of implementation
 
-> If any requested change conflicts with Rules v0 or `TEST_INVARIANTS_V0.md`, do NOT implement it.
+> If any requested change conflicts with Rules v0 or `docs/02_phase_1/test_invariants_v0.md`, do NOT implement it.
 > Explain why it would be unsafe instead.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprint-1 has been successfully completed according to the specifications in [SPRINT_1_COPILOT_AGENT_PROMPT.md](SPRINT_1_COPILOT_AGENT_PROMPT.md). All objectives have been met, tests pass, and the implementation respects all architectural invariants from [BACKEND_PHILOSOPHY.md](../BACKEND_PHILOSOPHY.md).
+Sprint-1 has been successfully completed according to the specifications in [sprint_1_prompt.md](../../06_contributing/copilot_prompts/phase_1/sprint_1_prompt.md). All objectives have been met, tests pass, and the implementation respects all architectural invariants from [backend_philosophy.md](../../01_architecture/backend_philosophy.md).
 
 ---
 
@@ -10,7 +10,7 @@ Sprint-1 has been successfully completed according to the specifications in [SPR
 
 ### Objective A: Architectural Guardrails ✅
 
-Created reusable base classes in [backend/core/models/base.py](../../backend/core/models/base.py):
+Created reusable base classes in [backend/core/models/base.py](../../../backend/core/models/base.py):
 
 #### 1. **SoftDeletable** - No Hard Deletes
 - Provides `deleted_at` timestamp field for soft deletion
@@ -42,7 +42,7 @@ All base classes include:
 
 ### Objective B: ContributionEvent Backbone (Evidence Layer) ✅
 
-Created [backend/core/models/contribution_event.py](../../backend/core/models/contribution_event.py):
+Created [backend/core/models/contribution_event.py](../../../backend/core/models/contribution_event.py):
 
 #### ContributionEvent Model
 
@@ -133,13 +133,13 @@ All code includes:
 - **Comprehensive docstrings** explaining philosophy and usage
 - **Inline comments** for critical invariant enforcement
 - **Clear error messages** when guardrails are violated
-- **References to BACKEND_PHILOSOPHY.md** in code comments
+- **References to backend_philosophy.md** in code comments
 
 ---
 
 ## Demonstration ✅
 
-Created [demo_sprint1.py](../../backend/demo_sprint1.py) demonstrating:
+Created [demo_sprint1.py](../../../backend/demo_sprint1.py) demonstrating:
 - Creating ContributionEvents successfully
 - Update prevention (immutability)
 - Delete prevention (immutability)
@@ -186,7 +186,7 @@ Sprint-1 is complete because:
 
 ## Architectural Invariants Respected ✓
 
-From BACKEND_PHILOSOPHY.md:
+From backend_philosophy.md:
 
 1. ✓ **Contributions are append-only**
    - ImmutableModel prevents updates/deletes

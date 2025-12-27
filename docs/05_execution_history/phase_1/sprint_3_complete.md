@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprint-3 has been successfully completed according to the specifications in [SPRINT_3_COPILOT_AGENT_PROMPT.md](SPRINT_3_COPILOT_AGENT_PROMPT.md). All objectives have been met: canonical entity skeletons are defined with required metadata fields, guardrails prevent direct edits, and no evaluation logic exists.
+Sprint-3 has been successfully completed according to the specifications in [sprint_3_prompt.md](../../06_contributing/copilot_prompts/phase_1/sprint_3_prompt.md). All objectives have been met: canonical entity skeletons are defined with required metadata fields, guardrails prevent direct edits, and no evaluation logic exists.
 
 ---
 
@@ -116,7 +116,7 @@ Observed service time patterns (approximations, not schedules).
 
 ### Test Coverage
 
-Created [backend/transit/tests/test_canonical_models.py](../../backend/transit/tests/test_canonical_models.py) with 46 structural tests:
+Created [backend/transit/tests/test_canonical_models.py](../../../backend/transit/tests/test_canonical_models.py) with 46 structural tests:
 
 **CanonicalModelBaseTests (2):**
 - CanonicalModel is abstract
@@ -205,7 +205,7 @@ Created [backend/transit/tests/test_canonical_models.py](../../backend/transit/t
 10. `/app/backend/transit/migrations/0001_initial.py` - Migration for all canonical models
 11. `/app/backend/transit/tests/__init__.py` - Tests package
 12. `/app/backend/transit/tests/test_canonical_models.py` - Structural tests
-13. `/app/docs/phase-1_sprints/PHASE_1_SPRINT_3_COMPLETE.md` - This document
+13. `/app/docs/05_execution_history/phase_1/sprint_3_complete.md` - This document
 
 ### Modified:
 
@@ -215,7 +215,7 @@ Created [backend/transit/tests/test_canonical_models.py](../../backend/transit/t
 
 ## Architectural Invariants Respected
 
-From BACKEND_PHILOSOPHY.md:
+From backend_philosophy.md:
 
 1. **Canonical data is derived, not edited**
    - `save()` raises NotImplementedError by default
@@ -324,7 +324,7 @@ Sprint-3 is complete because:
 **Human vs AI Contribution Split:**
 - AI: Generated all code, tests, and documentation based on sprint requirements
 - Human: Provided requirements document, reviewed implementation, approved completion
-- Collaboration: Requirements-driven implementation following SPRINT_3_COPILOT_AGENT_PROMPT.md
+- Collaboration: Requirements-driven implementation following `docs/06_contributing/copilot_prompts/phase_1/sprint_3_prompt.md`
 
 **Date Range of Implementation:**
 - December 23, 2025 (single-day sprint completion)

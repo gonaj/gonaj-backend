@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprint-2 has been successfully completed according to the specifications in [SPRINT_2_COPILOT_AGENT_PROMPT.md](SPRINT_2_COPILOT_AGENT_PROMPT.md). All objectives have been met, tests pass, and the implementation respects all architectural invariants from [BACKEND_PHILOSOPHY.md](../BACKEND_PHILOSOPHY.md).
+Sprint-2 has been successfully completed according to the specifications in [sprint_2_prompt.md](../../06_contributing/copilot_prompts/phase_1/sprint_2_prompt.md). All objectives have been met, tests pass, and the implementation respects all architectural invariants from [backend_philosophy.md](../../01_architecture/backend_philosophy.md).
 
 ---
 
@@ -15,8 +15,8 @@ Created authenticated write-only endpoint for submitting evidence as Contributio
 **Endpoint:** POST /v1/contributions/
 
 **Files Created:**
-- [backend/api/views/contributions.py](/app/backend/api/views/contributions.py) - ContributionSubmissionView APIView
-- [backend/api/serializers/contributions.py](/app/backend/api/serializers/contributions.py) - ContributionSubmissionSerializer
+- [backend/api/views/contributions.py](../../../backend/api/views/contributions.py) - ContributionSubmissionView APIView
+- [backend/api/serializers/contributions.py](../../backend/api/serializers/contributions.py) - ContributionSubmissionSerializer
 
 **Key Features:**
 - Authentication required (IsAuthenticated permission)
@@ -111,7 +111,7 @@ Created [backend/api/tests/test_contributions_api.py](/app/backend/api/tests/tes
 1. /app/backend/api/serializers/contributions.py - ContributionSubmissionSerializer
 2. /app/backend/api/views/contributions.py - ContributionSubmissionView
 3. /app/backend/api/tests/test_contributions_api.py - API tests
-4. /app/docs/phase-1_sprints/PHASE_1_SPRINT_2_COMPLETE.md - This document
+4. /app/docs/05_execution_history/phase_1/sprint_2_complete.md - This document
 
 ### Modified:
 1. /app/backend/api/urls.py - Added contribution_urlpatterns with /v1/contributions/ endpoint
@@ -182,7 +182,7 @@ Submit a contribution event (write-only, authenticated).
 
 ## Architectural Invariants Respected
 
-From BACKEND_PHILOSOPHY.md:
+From backend_philosophy.md:
 
 1. Contributions are append-only
    - API creates ContributionEvent records only
@@ -310,7 +310,7 @@ Sprint-2 is complete because:
 - Test-driven: Tests written alongside implementation
 - Incremental: Serializer -> View -> URLs -> Tests -> Verification
 - Conservative: No modifications to Sprint-1 code
-- Disciplined: Strict adherence to SPRINT_2_COPILOT_AGENT_PROMPT.md scope
+- Disciplined: Strict adherence to `docs/06_contributing/copilot_prompts/phase_1/sprint_2_prompt.md` scope
 
 ---
 
