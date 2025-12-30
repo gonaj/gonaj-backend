@@ -11,6 +11,7 @@ from .views.auth import (
     TokenRevokeView,
 )
 from .views.contributions import ContributionSubmissionView
+from .views.export import ContributionExportView
 
 # Authentication endpoints
 auth_urlpatterns = [
@@ -25,6 +26,11 @@ auth_urlpatterns = [
     path("auth/token/refresh", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/token/revoke", TokenRevokeView.as_view(), name="token-revoke"),
     path("auth/me", MeView.as_view(), name="me"),
+    path(
+        "auth/me/contributions/export",
+        ContributionExportView.as_view(),
+        name="contribution-export",
+    ),
     path(
         "auth/social/<str:provider>/callback",
         SocialCallbackView.as_view(),
