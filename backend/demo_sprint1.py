@@ -44,6 +44,7 @@ def demo_contribution_event():
     event = ContributionEvent.objects.create(
         client_generated_id=client_id,
         contributor=user,
+        contributor_fingerprint=user.id,  # Sprint-5B: explicit fingerprint
         contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
         subject_ref={"lat": 40.7128, "lon": -74.0060, "name_hint": "Main Street"},
         payload={"confidence": "high", "notes": "Saw the bus stop sign clearly"},
@@ -77,6 +78,7 @@ def demo_contribution_event():
     event2, created = ContributionEvent.create_or_get_idempotent(
         client_generated_id=client_id,  # Same client ID
         contributor=user,
+        contributor_fingerprint=user.id,  # Sprint-5B: explicit fingerprint
         contribution_type=ContributionEvent.ContributionType.ROUTE_EXISTS,  # Different!
         subject_ref={"different": "data"},
         payload={"different": "payload"},
@@ -95,6 +97,7 @@ def demo_contribution_event():
     event3 = ContributionEvent.objects.create(
         client_generated_id=uuid.uuid4(),  # Different client ID
         contributor=user,
+        contributor_fingerprint=user.id,  # Sprint-5B: explicit fingerprint
         contribution_type=ContributionEvent.ContributionType.ROUTE_TRAVERSAL,
         subject_ref={"route_name": "Bus 42"},
         payload={"gps_trace": "..."},

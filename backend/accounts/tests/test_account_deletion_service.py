@@ -286,6 +286,7 @@ class EvidencePreservationTests(TestCase):
             contribution = ContributionEvent.objects.create(
                 client_generated_id=uuid.uuid4(),
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
                 subject_ref={"lat": 40.7128 + i * 0.01, "lon": -74.0060},
                 payload={"confidence": "high", "notes": f"Contribution {i}"},
@@ -307,15 +308,24 @@ class EvidencePreservationTests(TestCase):
 
     def test_contribution_event_count_unchanged_after_deletion(self):
         """Test that the number of ContributionEvents is unchanged after deletion."""
-        count_before = ContributionEvent.objects.filter(contributor=self.user).count()
+        contribution_ids = [c.id for c in self.contributions]
+        count_before = ContributionEvent.objects.filter(id__in=contribution_ids).count()
+        self.assertEqual(len(contribution_ids), 3)
         self.assertEqual(count_before, 3)
 
         # Delete account
         self.service.delete_account(self.user)
 
-        # Count should still be 3 (user still referenced, just deactivated)
-        count_after = ContributionEvent.objects.filter(contributor=self.user).count()
-        self.assertEqual(count_after, 3)
+        # Count should still be 3 (contributions preserved, just de-identified)
+        count_after = ContributionEvent.objects.filter(id__in=contribution_ids).count()
+        self.assertEqual(count_after, count_before)
+
+        # Verify contributor FK is now NULL (de-identified)
+        for contribution_id in contribution_ids:
+            contribution = ContributionEvent.objects.get(id=contribution_id)
+            self.assertIsNone(contribution.contributor)
+            # But fingerprint is preserved
+            self.assertIsNotNone(contribution.contributor_fingerprint)
 
     def test_contribution_payloads_intact_after_deletion(self):
         """Test that contribution payloads are not modified during deletion."""
@@ -361,6 +371,7 @@ class CanonicalStabilityTests(TestCase):
         ContributionEvent.objects.create(
             client_generated_id=uuid.uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7128, "lon": -74.0060},
             payload={"confidence": "high"},

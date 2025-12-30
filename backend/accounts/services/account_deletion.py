@@ -1,5 +1,5 @@
 """
-Account Deletion Service - Sprint-5A (DATA_RIGHTS_V1 Compliance).
+Account Deletion Service - Sprint-5A/5B (DATA_RIGHTS_V1 Compliance).
 
 This service implements irreversible user account deletion following
 DATA_RIGHTS_V1 principles:
@@ -11,11 +11,12 @@ DATA_RIGHTS_V1 principles:
 WHAT THIS SERVICE DOES:
 - Permanently removes user identity and profile data
 - Revokes all active sessions and tokens immediately
+- De-identifies ContributionEvents (sets contributor=NULL, preserves fingerprint)
 - Prevents future authentication for the deleted account
 - Creates an audit record WITHOUT personal identifiers
 
 WHAT THIS SERVICE DOES NOT DO (Explicit Non-Goals):
-- Delete or modify ContributionEvent records (Sprint-5B handles de-identification)
+- Delete or modify ContributionEvent evidence payload
 - Trigger belief recomputation
 - Expose deletion events publicly
 - Allow deletion reversal
@@ -26,7 +27,8 @@ CRITICAL INVARIANTS:
 - Deletion is IDEMPOTENT (safe on retry)
 - Deletion is TRANSACTIONAL where possible
 - All tokens are revoked IMMEDIATELY
-- Evidence and belief remain INTACT
+- Evidence payload and belief remain INTACT
+- contributor_fingerprint is preserved for evaluation (INV-I1, INV-I2)
 
 CONFIGURATION:
 - AUDIT_LOG_USER_ID_SALT: Optional setting for a dedicated salt used when hashing
@@ -112,9 +114,10 @@ class AccountDeletionService:
 
         This method:
         1. Revokes all refresh tokens
-        2. Clears user profile/identity data
-        3. Deactivates the user account
-        4. Logs an audit entry (without PII)
+        2. De-identifies ContributionEvents (sets contributor=NULL)
+        3. Clears user profile/identity data
+        4. Deactivates the user account
+        5. Logs an audit entry (without PII)
 
         Args:
             user: The User instance to delete
@@ -126,8 +129,9 @@ class AccountDeletionService:
             DeletionResult with success status and metadata
 
         Note:
-            ContributionEvents are NOT modified by this service.
-            De-identification is handled separately in Sprint-5B.
+            ContributionEvent evidence payloads are NOT modified.
+            Only the contributor FK is set to NULL.
+            contributor_fingerprint is preserved for evaluation semantics.
 
         IDEMPOTENCY:
             If user is already deleted (is_active=False), returns success
@@ -148,14 +152,19 @@ class AccountDeletionService:
                 # This ensures no new access tokens can be obtained
                 tokens_revoked = self._revoke_all_tokens(user)
 
-                # Step 2: Clear user identity and profile data
+                # Step 2: De-identify ContributionEvents (Sprint-5B)
+                # Set contributor=NULL while preserving contributor_fingerprint
+                # This removes identity without affecting evaluation semantics
+                contributions_deidentified = self._deidentify_contributions(user)
+
+                # Step 3: Clear user identity and profile data
                 self._clear_user_identity(user)
 
-                # Step 3: Deactivate the user account
+                # Step 4: Deactivate the user account
                 deletion_time = timezone.now()
                 self._deactivate_user(user, deletion_time)
 
-                # Step 4: Log audit entry (no PII)
+                # Step 5: Log audit entry (no PII)
                 user_id_hash = self._hash_user_id(str(user.id))
                 self._log_deletion_audit(
                     user_id_hash=user_id_hash,
@@ -169,6 +178,7 @@ class AccountDeletionService:
                 extra={
                     "user_id_hash": user_id_hash,  # For correlation with audit log
                     "tokens_revoked": tokens_revoked,
+                    "contributions_deidentified": contributions_deidentified,
                     "reason": reason,
                 },
             )
@@ -188,6 +198,46 @@ class AccountDeletionService:
                 tokens_revoked=0,
                 error=str(e),
             )
+
+    def _deidentify_contributions(self, user) -> int:
+        """
+        De-identify all ContributionEvents for a user (Sprint-5B).
+
+        This method sets contributor=NULL on all ContributionEvents where
+        contributor=user, while preserving contributor_fingerprint.
+
+        DATA_RIGHTS_V1 compliance:
+        - Evidence payload is NOT modified (PH-1: Evidence is permanent)
+        - Only the contributor FK is nullified (PH-2: Identity is optional)
+        - contributor_fingerprint is preserved for evaluation (PH-4: Replay determinism)
+
+        INVARIANTS PRESERVED:
+        - INV-E1: ContributionEvent payload is immutable (only FK changed)
+        - INV-I1: Independence is counted via contributor_fingerprint, not FK
+        - INV-I2: Deletion does not change contributor counts
+
+        Args:
+            user: User instance whose contributions should be de-identified
+
+        Returns:
+            Number of contributions de-identified
+        """
+        from core.models import ContributionEvent
+
+        # Update all contributions to set contributor=NULL
+        # contributor_fingerprint is already set and immutable
+        count = ContributionEvent.objects.filter(contributor=user).update(
+            contributor=None
+        )
+
+        logger.info(
+            "Contributions de-identified",
+            extra={
+                "count": count,
+            },
+        )
+
+        return count
 
     def _revoke_all_tokens(self, user) -> int:
         """

@@ -34,6 +34,7 @@ from core.models import ContributionEvent
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+
 from transit.evaluation import (
     AggregationResult,
     EvidenceWeight,
@@ -306,6 +307,7 @@ class StopEvidenceAggregatorTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=uuid4(),
             contributor=contributor,
+            contributor_fingerprint=contributor.id,  # Sprint-5B: explicit fingerprint
             contribution_type=contribution_type,
             subject_ref={"lat": lat, "lon": lon},
             payload={"test": True},
@@ -712,6 +714,7 @@ class NoCanonicalWritesTests(TestCase):
             ContributionEvent.objects.create(
                 client_generated_id=uuid4(),
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
                 subject_ref={"lat": 40.7128, "lon": -74.0060},
                 payload={"test": True},
@@ -738,6 +741,7 @@ class NoCanonicalWritesTests(TestCase):
             ContributionEvent.objects.create(
                 client_generated_id=uuid4(),
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
                 subject_ref={"lat": 40.7128, "lon": -74.0060},
                 payload={"test": True},

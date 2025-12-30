@@ -36,6 +36,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TestCase
 from django.utils import timezone
+
 from transit.evaluation import (
     AggregationResult,
     CreationDecision,
@@ -83,6 +84,7 @@ def create_contribution_event(
     """Create a ContributionEvent for testing."""
     return ContributionEvent.objects.create(
         contributor=user,
+        contributor_fingerprint=user.id,  # Sprint-5B: explicit fingerprint
         client_generated_id=uuid4(),  # Required unique ID
         contribution_type=contribution_type,
         observed_at=observed_at,

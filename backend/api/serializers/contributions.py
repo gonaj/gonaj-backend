@@ -136,10 +136,24 @@ class ContributionSubmissionSerializer(serializers.Serializer):
         The contributor is expected to be added to validated_data by the view
         before calling this method.
 
+        Sprint-5B: contributor_fingerprint is explicitly set from contributor.id.
+        This preserves identity for evaluation even after account deletion.
+
         Returns:
             tuple: (ContributionEvent, created) where created is a boolean
         """
         client_generated_id = validated_data.pop("client_generated_id")
+
+        # Sprint-5B: Explicitly set contributor_fingerprint from contributor
+        # This is the submission-time identity used by evaluation logic
+        contributor = validated_data.get("contributor")
+        if contributor is None:
+            raise serializers.ValidationError(
+                {
+                    "contributor": "Contributor is required to create a contribution event."
+                }
+            )
+        validated_data["contributor_fingerprint"] = contributor.id
 
         # Use the model's idempotent creation method
         event, created = ContributionEvent.create_or_get_idempotent(

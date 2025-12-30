@@ -16,11 +16,12 @@ These tests ensure that evidence integrity cannot be violated.
 import uuid
 from datetime import timedelta
 
-from core.models import ContributionEvent
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
+
+from core.models import ContributionEvent
 
 User = get_user_model()
 
@@ -45,6 +46,7 @@ class ContributionEventCreationTests(TestCase):
         event = ContributionEvent.objects.create(
             client_generated_id=client_id,
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B: explicit fingerprint
             device_id=device_id,
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7128, "lon": -74.0060},
@@ -80,6 +82,7 @@ class ContributionEventCreationTests(TestCase):
         event = ContributionEvent.objects.create(
             client_generated_id=client_id,
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B: explicit fingerprint
             contribution_type=ContributionEvent.ContributionType.ROUTE_EXISTS,
             subject_ref={"route_name": "Bus 42"},
             payload={"description": "Saw this bus running"},
@@ -108,6 +111,7 @@ class ContributionEventCreationTests(TestCase):
             event = ContributionEvent.objects.create(
                 client_generated_id=uuid.uuid4(),
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=contrib_type,
                 subject_ref={"test": "data"},
                 payload={"test": "payload"},
@@ -128,6 +132,7 @@ class ContributionEventImmutabilityTests(TestCase):
         self.event = ContributionEvent.objects.create(
             client_generated_id=uuid.uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7128, "lon": -74.0060},
             payload={"confidence": "high"},
@@ -161,6 +166,7 @@ class ContributionEventImmutabilityTests(TestCase):
             ContributionEvent.objects.create(
                 client_generated_id=uuid.uuid4(),
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
                 subject_ref={"id": i},
                 payload={"data": i},
@@ -197,6 +203,7 @@ class ContributionEventIdempotencyTests(TestCase):
         event1, created1 = ContributionEvent.create_or_get_idempotent(
             client_generated_id=client_id,
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7128, "lon": -74.0060},
             payload={"confidence": "high"},
@@ -210,6 +217,7 @@ class ContributionEventIdempotencyTests(TestCase):
         event2, created2 = ContributionEvent.create_or_get_idempotent(
             client_generated_id=client_id,
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.ROUTE_EXISTS,  # Different!
             subject_ref={"different": "data"},  # Different!
             payload={"different": "payload"},  # Different!
@@ -234,6 +242,7 @@ class ContributionEventIdempotencyTests(TestCase):
         ContributionEvent.objects.create(
             client_generated_id=client_id,
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"test": "data"},
             payload={"test": "payload"},
@@ -248,6 +257,7 @@ class ContributionEventIdempotencyTests(TestCase):
             ContributionEvent.objects.create(
                 client_generated_id=client_id,
                 contributor=self.user,
+                contributor_fingerprint=self.user.id,  # Sprint-5B
                 contribution_type=ContributionEvent.ContributionType.ROUTE_EXISTS,
                 subject_ref={"different": "data"},
                 payload={"different": "payload"},
@@ -348,6 +358,7 @@ class ContributionEventQueryTests(TestCase):
         self.stop_event = ContributionEvent.objects.create(
             client_generated_id=uuid.uuid4(),
             contributor=self.user1,
+            contributor_fingerprint=self.user1.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"test": "data"},
             payload={"test": "payload"},
@@ -357,6 +368,7 @@ class ContributionEventQueryTests(TestCase):
         self.route_event = ContributionEvent.objects.create(
             client_generated_id=uuid.uuid4(),
             contributor=self.user2,
+            contributor_fingerprint=self.user2.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.ROUTE_EXISTS,
             subject_ref={"test": "data"},
             payload={"test": "payload"},

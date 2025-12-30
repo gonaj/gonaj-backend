@@ -34,6 +34,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TestCase
 from django.utils import timezone
+
 from transit.evaluation import (
     BaseEvaluator,
     EvaluationContext,
@@ -140,6 +141,7 @@ class DeterministicOrderingTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=client_generated_id or uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=contribution_type,
             subject_ref={"lat": 40.7, "lon": -74.0},
             payload={"test": True},
@@ -276,6 +278,7 @@ class NoEvidenceLossTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=contribution_type,
             subject_ref={"lat": 40.7, "lon": -74.0},
             payload={"test": True},
@@ -362,6 +365,7 @@ class EvidenceImmutabilityTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7, "lon": -74.0},
             payload={"original": True},
@@ -460,6 +464,7 @@ class ReplayEquivalenceTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=ContributionEvent.ContributionType.STOP_EXISTS,
             subject_ref={"lat": 40.7, "lon": -74.0},
             payload={"test": True},
@@ -748,6 +753,7 @@ class EvaluatorIntegrationTests(TestCase):
         return ContributionEvent.objects.create(
             client_generated_id=uuid4(),
             contributor=self.user,
+            contributor_fingerprint=self.user.id,  # Sprint-5B
             contribution_type=contribution_type,
             subject_ref={"lat": 40.7, "lon": -74.0},
             payload={"test": True},

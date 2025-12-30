@@ -2,6 +2,7 @@
 Stop evidence aggregation module.
 
 Sprint-4B: Positive Evidence Aggregation (No Creation)
+Sprint-5B: Evidence De-identification with Evaluation Safety
 
 This module provides pure aggregation of Stop-related evidence into
 structured summaries. It performs transformation only - no decisions.
@@ -28,6 +29,14 @@ INVARIANTS ENFORCED:
 - INV-C3: Spatial convergence (clustering)
 - INV-D1: Accuracy as weight, not gate
 - INV-D2: Accuracy cannot dominate alone
+- INV-I1: Contributor independence counted correctly after account deletion (Sprint-5B)
+- INV-I2: Account deletion does not reduce/inflate contributor counts (Sprint-5B)
+
+SPRINT-5B CRITICAL NOTES:
+- All contributor identity references use contributor_fingerprint, NOT contributor_id
+- contributor_fingerprint is immutable and survives account deletion
+- contributor_id (FK) may be NULL after deletion and MUST NOT be used for evaluation
+- This ensures PH-4 (replay determinism) and PH-5 (independence is event-level)
 
 This is a PURE TRANSFORMATION module:
     Evidence -> Aggregates
@@ -576,9 +585,11 @@ class StopEvidenceAggregator:
             evidence_weights.append(weight)
 
             # Track user contribution count for dampening
-            user_id = event.contributor_id
-            user_contribution_counts[user_id] = (
-                user_contribution_counts.get(user_id, 0) + 1
+            # Sprint-5B: Use contributor_fingerprint (immutable) NOT contributor_id (nullable FK)
+            # This ensures contributor independence survives account deletion (INV-I1, INV-I2)
+            fingerprint = event.contributor_fingerprint
+            user_contribution_counts[fingerprint] = (
+                user_contribution_counts.get(fingerprint, 0) + 1
             )
 
         # Extract locations for clustering
@@ -596,7 +607,9 @@ class StopEvidenceAggregator:
         )
 
         # Collect all unique contributors
-        all_contributors = frozenset(e.contributor_id for e in sorted_evidence)
+        # Sprint-5B: Use contributor_fingerprint (immutable) NOT contributor_id (nullable FK)
+        # This ensures contributor counts remain correct after account deletion (INV-I1, INV-I2)
+        all_contributors = frozenset(e.contributor_fingerprint for e in sorted_evidence)
 
         return AggregationResult(
             clusters=tuple(clusters),
@@ -631,14 +644,18 @@ class StopEvidenceAggregator:
 
         INV-D1: Accuracy is weight, not gate (always contributes).
         INV-C2: Same-user repetition is dampened.
+
+        Sprint-5B: Uses contributor_fingerprint for user identity, NOT contributor_id.
+        This ensures dampening logic is stable across account deletions.
         """
         # GPS accuracy weight
         accuracy = event.context.get("gps_accuracy") if event.context else None
         accuracy_weight = self._weight_calculator.calculate_accuracy_weight(accuracy)
 
         # User dampening weight
-        user_id = event.contributor_id
-        contribution_index = user_contribution_counts.get(user_id, 0)
+        # Sprint-5B: Use contributor_fingerprint (immutable) NOT contributor_id (nullable FK)
+        fingerprint = event.contributor_fingerprint
+        contribution_index = user_contribution_counts.get(fingerprint, 0)
         user_dampening = self._weight_calculator.calculate_user_dampening(
             contribution_index
         )
@@ -764,7 +781,11 @@ class StopEvidenceAggregator:
             )
 
             # Collect unique contributors
-            contributors = frozenset(e.contributor_id for e in cluster_evidence)
+            # Sprint-5B: Use contributor_fingerprint (immutable) NOT contributor_id (nullable FK)
+            # This ensures contributor counts remain correct after account deletion (INV-I1, INV-I2)
+            contributors = frozenset(
+                e.contributor_fingerprint for e in cluster_evidence
+            )
 
             # Calculate weighted score
             weighted_score = sum(

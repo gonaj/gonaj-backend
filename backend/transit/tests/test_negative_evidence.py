@@ -25,6 +25,7 @@ from core.models import ContributionEvent, User
 from django.contrib.gis.geos import Point
 from django.test import TestCase
 from django.utils import timezone
+
 from transit.evaluation.base import EvaluationContext
 from transit.evaluation.stop_aggregation import (
     EvidenceTypeBreakdown,
@@ -199,6 +200,7 @@ class NegativeEvidenceWeightingTest(TestCase):
         return ContributionEvent.objects.create(
             contribution_type=ContributionEvent.ContributionType.STOP_NOT_EXISTS,
             contributor=user,
+            contributor_fingerprint=user.id,  # Sprint-5B: explicit fingerprint
             client_generated_id=uuid4(),
             subject_ref={"location": {"latitude": location.y, "longitude": location.x}},
             payload={
