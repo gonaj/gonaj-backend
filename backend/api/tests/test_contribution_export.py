@@ -27,7 +27,7 @@ from rest_framework.test import APIClient
 
 
 class ContributionExportTestCase(TestCase):
-    """Tests for GET /api/auth/me/contributions/export."""
+    """Tests for GET /api/me/contributions/export."""
 
     def setUp(self):
         """Create test user and client."""
@@ -42,7 +42,7 @@ class ContributionExportTestCase(TestCase):
 
     def test_export_requires_authentication(self):
         """Test that export endpoint requires authentication."""
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
         # In this project, unauthenticated requests to views protected by
         # IsAuthenticated return 403 Forbidden (given the configured
         # authentication classes, e.g. SessionAuthentication), so we assert
@@ -53,7 +53,7 @@ class ContributionExportTestCase(TestCase):
         """Test export works when user has no contributions."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["export_version"], "1.0")
@@ -75,7 +75,7 @@ class ContributionExportTestCase(TestCase):
         )
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["contribution_count"], 1)
@@ -120,7 +120,7 @@ class ContributionExportTestCase(TestCase):
         )
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["contribution_count"], 1)
@@ -166,7 +166,7 @@ class ContributionExportPrivacyTestCase(TestCase):
         allow cross-referencing contributions post-deletion.
         """
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -187,7 +187,7 @@ class ContributionExportPrivacyTestCase(TestCase):
         device_id, or other internal identifiers.
         """
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -212,7 +212,7 @@ class ContributionExportPrivacyTestCase(TestCase):
         - payload
         """
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -263,7 +263,7 @@ class ContributionExportDeletedUserTestCase(TestCase):
         self.user.save()
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("error", response.data)
@@ -308,8 +308,8 @@ class ContributionExportStabilityTestCase(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
         # Make two export requests
-        response1 = self.client.get("/api/auth/me/contributions/export")
-        response2 = self.client.get("/api/auth/me/contributions/export")
+        response1 = self.client.get("/api/me/contributions/export")
+        response2 = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response1.status_code, status.HTTP_200_OK)
         self.assertEqual(response2.status_code, status.HTTP_200_OK)
@@ -325,7 +325,7 @@ class ContributionExportStabilityTestCase(TestCase):
         """
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -355,7 +355,7 @@ class ContributionExportVersionTestCase(TestCase):
         """Test that export includes version for future compatibility."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("export_version", response.data)
@@ -378,7 +378,7 @@ class ContributionExportVersionTestCase(TestCase):
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
-        response = self.client.get("/api/auth/me/contributions/export")
+        response = self.client.get("/api/me/contributions/export")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("contribution_count", response.data)

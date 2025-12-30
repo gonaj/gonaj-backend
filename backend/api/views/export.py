@@ -5,7 +5,7 @@ This module provides the contribution export endpoint as part of
 DATA_RIGHTS_V1 compliance (Right to Data Access).
 
 Endpoint:
-- GET /api/auth/me/contributions/export - Export user's own contributions
+- GET /api/me/contributions/export - Export user's own contributions
 
 PHILOSOPHY:
 Export is a user right, not system introspection. Users receive only
@@ -45,7 +45,7 @@ class ContributionExportView(APIView):
     """
     API endpoint for exporting user's own contributions.
 
-    GET /api/auth/me/contributions/export
+    GET /api/me/contributions/export
 
     Returns all contributions submitted by the authenticated user
     in a format suitable for data portability.
