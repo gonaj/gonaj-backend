@@ -60,7 +60,7 @@
         "PYTHONPATH": "/app/backend",
         "DJANGO_SETTINGS_MODULE": "backend.settings"
     },
-    "remoteUser": "root",
+    "remoteUser": "appuser",
     "shutdownAction": "stopCompose",
     "features": {
         "ghcr.io/devcontainers/features/git:1": {}
