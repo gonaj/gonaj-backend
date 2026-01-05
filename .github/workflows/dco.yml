@@ -8,4 +8,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check DCO sign-off
-        uses: tim-actions/dco@v2
+        uses: tim-actions/dco@v1.1.0
