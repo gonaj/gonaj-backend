@@ -241,3 +241,5 @@ It trades short-term convenience for:
 * Trust
 
 That tradeoff is deliberate and permanent.
+
+The licensing and governance guarantees that protect this philosophy are defined in `GOVERNANCE.md` at the repository root.

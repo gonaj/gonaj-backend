@@ -172,3 +172,43 @@ This project values **correctness over convenience** and **long‑term trust ove
 Thoughtful, disciplined contributions are far more valuable than rapid feature additions.
 
 Thank you for helping build something that can last.
+
+---
+
+## Certificate of Origin (DCO)
+
+Gonaj uses a **Developer Certificate of Origin (DCO)** to keep the project legally clean and trustworthy for everyone.
+
+By contributing, you confirm that:
+
+- You wrote the contribution yourself, **or**
+- You have the right to submit it under the project’s license
+
+This helps ensure that all code in Gonaj can remain open, auditable, and safely reusable.
+
+### How to sign off a contribution
+
+Each commit must include a `Signed-off-by` line in the commit message:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+You can add this automatically by committing with:
+
+```
+git commit -s
+```
+
+That’s it — no forms, no account registration, no copyright transfer.
+
+### What this does *not* do
+
+- It does **not** transfer ownership of your work  
+- It does **not** give anyone special relicensing rights  
+- It does **not** affect how your contribution is credited  
+
+It simply confirms that contributions are made in good faith and can be safely shared.
+
+For the full text of the Developer Certificate of Origin, see `DCO.md`.
+

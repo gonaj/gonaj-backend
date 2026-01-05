@@ -287,3 +287,11 @@ Built with:
 **Questions?** Check the [documentation](docs/README.md) or open a discussion.
 
 **Found a bug?** Please read [CONTRIBUTING.md](CONTRIBUTING.md) first, then open an issue.
+
+## Licensing
+
+This repository is licensed under GNU AGPL-3.0.
+Documentation under /docs is licensed under CC BY 4.0.
+
+See LICENSE and GOVERNANCE.md for details.
+

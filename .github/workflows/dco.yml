@@ -1,0 +1,11 @@
+name: DCO Check
+
+on:
+  pull_request:
+
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check DCO sign-off
+        uses: tim-actions/dco@v2
