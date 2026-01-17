@@ -429,7 +429,7 @@ class PermissionBoundaryTests(TestCase):
         response = self.client.post(
             "/api/v1/contributions/",
             {
-                "client_generated_id": "test-contrib-1",
+                "client_generated_id": "550e8400-e29b-41d4-a716-446655440000",
                 "contribution_type": "stop_exists",
                 "subject_ref": {"lat": 40.7, "lon": -74.0},
                 "payload": {},
@@ -472,10 +472,20 @@ class AccessFailureSecurityTests(TestCase):
 
     def test_405_responses_are_consistent(self):
         """Method not allowed responses should be consistent."""
-        # Try unsupported method
+        # For protected endpoints, DRF checks authentication before HTTP methods.
+        # This is expected behavior: don't reveal available methods to unauthenticated users.
+        # Test with an authenticated user to verify 405 handling.
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="methodtest",
+            email="methodtest@example.com",
+            password="testpass123"
+        )
+        self.client.force_authenticate(user=user)
+        
         response = self.client.get("/api/v1/contributions/")
         
-        # Should return 405
+        # Should return 405 for authenticated user using wrong method
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         
         # Response should not leak internal structure
