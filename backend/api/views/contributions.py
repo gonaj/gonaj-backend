@@ -13,11 +13,16 @@ SCOPE (Sprint-2):
 - No read endpoints
 - No canonical data exposure
 - No evaluation or truth determination
+
+API BOUNDARY (Phase-2 Sprint-1):
+- Contributor capability required (IsContributor permission)
+- POST method only (write-only endpoint)
+- No anonymous mutation
 """
 
+from api.permissions import IsContributor
 from api.serializers.contributions import ContributionSubmissionSerializer
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -63,11 +68,18 @@ class ContributionSubmissionView(APIView):
 
     Error Responses:
     - 401 Unauthorized: Authentication required
+    - 403 Forbidden: Contributor capability required
     - 400 Bad Request: Invalid payload structure or validation failure
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: IsContributor (authenticated + contributor capability)
+    - HTTP Methods: POST only
+    - Mutation: Creates ContributionEvent (intentional for evidence submission)
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsContributor]
     serializer_class = ContributionSubmissionSerializer
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         """
