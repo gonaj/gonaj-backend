@@ -9,9 +9,20 @@ This module defines explicit permission classes that enforce API boundaries:
 PHILOSOPHY:
 Access must be granted explicitly, never implicitly. Any endpoint without
 an explicit permission declaration must be inaccessible.
+
+CANONICAL READ API HARDENING (Phase-2 Sprint-2):
+- Canonical data is the only data exposed to anonymous users
+- Evidence data must never be inferable from read APIs
+- Absence of data must not be interpreted as falseness
+- Backend remains sole authority on truth
 """
 
 from rest_framework import permissions
+
+# Pagination constants for canonical read endpoints
+# These prevent unbounded queries and protect against scraping/DoS
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
 
 
 class DenyByDefault(permissions.BasePermission):
@@ -66,8 +77,42 @@ class ReadOnlyPublic(permissions.BasePermission):
     
     Safe methods: GET, HEAD, OPTIONS
     Unsafe methods: POST, PUT, PATCH, DELETE
+    
+    CANONICAL READ HARDENING (Phase-2 Sprint-2):
+    - This permission enforces that canonical data is read-only
+    - Anonymous users can access canonical endpoints
+    - No mutation is possible regardless of authentication status
+    - Unsupported methods return HTTP 405
     """
+    
+    message = "This endpoint is read-only. No modifications allowed."
     
     def has_permission(self, request, view):
         """Allow only safe (read) methods."""
+        return request.method in permissions.SAFE_METHODS
+
+
+class ReadOnlyAuthenticated(permissions.BasePermission):
+    """
+    Allow read-only access for authenticated users only.
+    Deny all write operations and anonymous access.
+    
+    This is used for user-scoped read endpoints that should only
+    be accessible to the authenticated user for their own data.
+    
+    Safe methods: GET, HEAD, OPTIONS (authenticated only)
+    Unsafe methods: Always denied
+    Anonymous: Always denied
+    
+    CANONICAL READ HARDENING (Phase-2 Sprint-2):
+    - User-scoped data (exports, profile) requires authentication
+    - Read-only enforcement prevents accidental mutation endpoints
+    """
+    
+    message = "Authentication required for read access."
+    
+    def has_permission(self, request, view):
+        """Allow only authenticated users making safe requests."""
+        if not request.user or not request.user.is_authenticated:
+            return False
         return request.method in permissions.SAFE_METHODS
