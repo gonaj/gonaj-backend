@@ -72,17 +72,36 @@ class ReadOnlyPublic(permissions.BasePermission):
     Allow read-only access for everyone (authenticated or not).
     Deny all write operations.
     
-    This is used for public canonical data endpoints that should be
-    read-only for anonymous users.
+    This is the MANDATORY permission for canonical read endpoints.
     
-    Safe methods: GET, HEAD, OPTIONS
-    Unsafe methods: POST, PUT, PATCH, DELETE
+    CANONICAL READ GUARDRAILS (Phase-2 Sprint-2A):
+    As of Sprint-2A, NO canonical read endpoints exist yet (no Stops, Routes,
+    or transit entity endpoints are publicly exposed).
+    
+    This permission class exists to enforce mandatory constraints when
+    canonical endpoints are implemented in future sprints:
+    
+    RULES:
+    - Only GET and HEAD methods allowed (OPTIONS for CORS)
+    - Anonymous access permitted (canonical data is public)
+    - All mutation methods explicitly denied (POST, PUT, PATCH, DELETE)
+    - Returns HTTP 405 Method Not Allowed for unsafe methods
+    
+    USAGE (Future):
+    All canonical read endpoints MUST use this permission:
+        class StopDetailView(APIView):
+            permission_classes = [ReadOnlyPublic]
     
     CANONICAL READ HARDENING (Phase-2 Sprint-2):
     - This permission enforces that canonical data is read-only
     - Anonymous users can access canonical endpoints
     - No mutation is possible regardless of authentication status
     - Unsupported methods return HTTP 405
+    
+    SAFETY GUARANTEES:
+    - No writes possible even if view accidentally implements unsafe methods
+    - No authentication bypass possible for mutation operations
+    - Clear error messages for developers attempting writes
     """
     
     message = "This endpoint is read-only. No modifications allowed."
