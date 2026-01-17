@@ -34,6 +34,11 @@ API BOUNDARY (Phase-2 Sprint-1):
 - User-scoped access only (IsAuthenticated + own data)
 - GET method only (read-only)
 - No mutation
+
+CANONICAL READ HARDENING (Phase-2 Sprint-2):
+- Pagination enforcement with bounded defaults
+- Malformed parameter handling
+- Stable output under hostile input
 """
 
 from core.models import ContributionEvent
@@ -42,6 +47,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.permissions import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from api.serializers.export import ContributionExportListSerializer
 from api.views.auth import JWTAuthentication
 
@@ -84,21 +90,59 @@ class ContributionExportView(APIView):
     - Permission: IsAuthenticated (user can only export own data)
     - HTTP Methods: GET only
     - Read-only: No mutation
+    
+    CANONICAL READ HARDENING (Phase-2 Sprint-2):
+    - Pagination with bounded page sizes
+    - Malformed parameter defaults to safe values
+    - Explicit rejection of unbounded queries
     """
 
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'options']  # Explicit allow-list
 
+    def _parse_pagination_params(self, request):
+        """
+        Parse and validate pagination parameters from request.
+        
+        Returns safe defaults for malformed or missing parameters.
+        Rejects unbounded queries explicitly.
+        
+        Phase-2 Sprint-2: Canonical read hardening
+        """
+        try:
+            page = int(request.query_params.get('page', 1))
+            if page < 1:
+                page = 1
+        except (ValueError, TypeError):
+            page = 1
+        
+        try:
+            page_size = int(request.query_params.get('page_size', DEFAULT_PAGE_SIZE))
+            if page_size < 1:
+                page_size = DEFAULT_PAGE_SIZE
+            elif page_size > MAX_PAGE_SIZE:
+                page_size = MAX_PAGE_SIZE
+        except (ValueError, TypeError):
+            page_size = DEFAULT_PAGE_SIZE
+        
+        return page, page_size
+
     def get(self, request):
         """
-        Export user's contributions.
+        Export user's contributions with pagination.
 
-        Returns all ContributionEvents submitted by the authenticated user.
+        Returns ContributionEvents submitted by the authenticated user.
         Only user-supplied fields are included - no internal identifiers.
 
         The export is deterministic: repeated calls with the same data
         produce identical results (ordered by observed_at).
+        
+        Query Parameters:
+        - page: Page number (default: 1)
+        - page_size: Items per page (default: 20, max: 100)
+        
+        Phase-2 Sprint-2: Added pagination for bounded queries.
         """
         user = request.user
 
@@ -111,15 +155,36 @@ class ContributionExportView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Parse pagination parameters with safe defaults
+        page, page_size = self._parse_pagination_params(request)
+        
         # Query user's contributions
         # Order by observed_at for deterministic export (INV-B1 principle)
-        contributions = ContributionEvent.objects.filter(contributor=user).order_by(
+        contributions_qs = ContributionEvent.objects.filter(contributor=user).order_by(
             "observed_at", "id"
         )
+        
+        # Get total count for pagination metadata
+        total_count = contributions_qs.count()
+        
+        # Apply pagination bounds
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        contributions = list(contributions_qs[start_idx:end_idx])
 
         # Serialize with export-specific serializer
         # This serializer explicitly excludes internal identifiers
         serializer = ContributionExportListSerializer()
-        export_data = serializer.to_representation(list(contributions))
+        export_data = serializer.to_representation(contributions)
+        
+        # Add pagination metadata
+        export_data["pagination"] = {
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": (total_count + page_size - 1) // page_size if total_count > 0 else 1,
+            "has_next": end_idx < total_count,
+            "has_previous": page > 1,
+        }
 
         return Response(export_data, status=status.HTTP_200_OK)

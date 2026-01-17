@@ -154,12 +154,25 @@ class UserProfileSerializer(serializers.ModelSerializer):
     Serializer for user profile information.
 
     Used by the /auth/me endpoint to return current user data.
+    
+    CANONICAL READ HARDENING (Phase-2 Sprint-2):
+    - Explicit field whitelist
+    - All fields are read-only
+    - No internal identifiers exposed
+    - No evaluation or moderation data
+    
+    BLOCKED FIELDS (must never appear):
+    - password, password_hash
+    - privacy_consent_version, privacy_consent_ts (internal compliance)
+    - is_staff, is_superuser (privilege information)
+    - Any evaluation scores or contributor metrics
     """
 
     id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = User
+        # Explicit whitelist of safe-to-expose fields
         fields = [
             "id",
             "username",
@@ -170,6 +183,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "date_joined",
             "last_login",
         ]
+        # All fields are read-only - this is a read-only serializer
         read_only_fields = fields
 
 

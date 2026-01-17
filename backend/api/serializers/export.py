@@ -30,9 +30,31 @@ INVARIANTS ENFORCED:
 - INV-D2: Export must not enable cross-contribution linkage beyond timestamps
 - INV-D3: Export must not weaken post-deletion anonymity
 - INV-D4: Export must not leak contributor_fingerprint
+
+CANONICAL READ HARDENING (Phase-2 Sprint-2):
+- Explicit field whitelist (not blacklist)
+- No field can be added without explicit review
+- Serializer validates output schema
 """
 
 from rest_framework import serializers
+
+
+# BLOCKED FIELDS - These must NEVER appear in export output
+# Phase-2 Sprint-2: Explicit documentation of forbidden fields
+BLOCKED_EXPORT_FIELDS = frozenset([
+    "id",                       # Server-generated UUID
+    "client_generated_id",      # Internal idempotency key
+    "contributor",              # User reference (FK)
+    "contributor_id",           # User ID
+    "contributor_fingerprint",  # Evaluation identity (INV-D4)
+    "device_id",                # Internal tracking
+    "context",                  # System metadata
+    "submitted_at",             # Server timestamp
+    "created_at",               # Model timestamp
+    "updated_at",               # Model timestamp
+    "moderation_status",        # Internal moderation state
+])
 
 
 class ContributionExportSerializer(serializers.Serializer):
@@ -78,13 +100,28 @@ class ContributionExportSerializer(serializers.Serializer):
 
         This method explicitly extracts only whitelisted fields.
         Any internal identifiers are intentionally omitted.
+        
+        Phase-2 Sprint-2: Explicit whitelist approach for canonical read hardening.
         """
-        return {
+        # Explicit whitelist - only these fields can be exported
+        # Adding new fields requires explicit code change and review
+        result = {
             "observed_at": instance.observed_at.isoformat(),
             "contribution_type": instance.contribution_type,
             "subject_ref": instance.subject_ref,
             "payload": instance.payload,
         }
+        
+        # Phase-2 Sprint-2: Validate no blocked fields leaked
+        # This is a defense-in-depth check
+        for key in result.keys():
+            if key in BLOCKED_EXPORT_FIELDS:
+                raise ValueError(
+                    f"SECURITY: Blocked field '{key}' in export output. "
+                    "This is a programming error."
+                )
+        
+        return result
 
 
 class ContributionExportListSerializer(serializers.Serializer):
