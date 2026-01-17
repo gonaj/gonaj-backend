@@ -11,6 +11,11 @@ Endpoints:
 PHILOSOPHY:
 These endpoints represent user rights over their own data.
 The views are routing/presentation layer only - all logic lives in services.
+
+API BOUNDARY (Phase-2 Sprint-1):
+- User-scoped access only (IsAuthenticated + own data)
+- Explicit HTTP method restrictions per endpoint
+- No cross-user access possible
 """
 
 from accounts.services.account_deletion import AccountDeletionService
@@ -51,10 +56,16 @@ class AccountDeletionView(APIView):
     - Deletion is immediate
     - Deletion is final
     - Evidence is preserved (de-identified, not deleted)
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: IsAuthenticated (user can only delete own account)
+    - HTTP Methods: DELETE only
+    - Mutation: Deletes user account (intentional for data rights)
     """
 
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    http_method_names = ['delete', 'options']  # Explicit allow-list
 
     def delete(self, request):
         """

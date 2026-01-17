@@ -115,9 +115,15 @@ class MagicLinkRequestView(APIView):
     - Implement rate limiting (max N requests per email per hour)
     - Add idempotency key support
     - Track magic link requests in analytics
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (public endpoint for authentication initiation)
+    - HTTP Methods: POST only
+    - No mutation of user state (only sends email)
     """
 
     permission_classes = [AllowAny]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         serializer = MagicLinkRequestSerializer(data=request.data)
@@ -191,9 +197,15 @@ class MagicLinkVerifyView(APIView):
         }
 
     If the email doesn't exist, a new user is created.
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (public endpoint for authentication)
+    - HTTP Methods: POST only
+    - Mutation: Creates user if not exists (intentional for authentication)
     """
 
     permission_classes = [AllowAny]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     @transaction.atomic
     def post(self, request):
@@ -284,9 +296,14 @@ class LoginView(APIView):
         {
             "error": "Invalid email or password"
         }
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (public endpoint for authentication)
+    - HTTP Methods: POST only
     """
 
     permission_classes = [AllowAny]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -341,10 +358,16 @@ class LogoutView(APIView):
         {
             "message": "Logged out successfully"
         }
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: IsAuthenticated (requires valid access token)
+    - HTTP Methods: POST only
+    - Mutation: Revokes refresh tokens (intentional for logout)
     """
 
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         refresh_token = request.data.get("refresh_token")
@@ -398,9 +421,15 @@ class TokenRefreshView(APIView):
 
     Note: The old refresh token is invalidated (single-use rotation).
     If the old token is used again, all tokens are revoked for security.
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (validates refresh token internally)
+    - HTTP Methods: POST only
+    - Mutation: Rotates refresh tokens (intentional for security)
     """
 
     permission_classes = [AllowAny]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         serializer = TokenRefreshSerializer(data=request.data)
@@ -446,9 +475,15 @@ class TokenRevokeView(APIView):
         {
             "message": "Token revoked successfully"
         }
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (validates refresh token internally)
+    - HTTP Methods: POST only
+    - Mutation: Revokes refresh tokens (intentional for security)
     """
 
     permission_classes = [AllowAny]  # No auth required, just need valid token
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     def post(self, request):
         serializer = TokenRevokeSerializer(data=request.data)
@@ -509,10 +544,16 @@ class MeView(APIView):
         {
             "detail": "Authentication credentials were not provided."
         }
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: IsAuthenticated (requires valid access token)
+    - HTTP Methods: GET only
+    - Read-only: No mutation
     """
 
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
+    http_method_names = ['get', 'options']  # Explicit allow-list
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
@@ -547,9 +588,15 @@ class SocialCallbackView(APIView):
     - Support multiple providers (Google, Facebook, etc.)
     - Handle provider-specific errors
     - Add state validation for CSRF protection
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: AllowAny (public endpoint for OAuth callback)
+    - HTTP Methods: POST only
+    - Mutation: Creates user if not exists (intentional for authentication)
     """
 
     permission_classes = [AllowAny]
+    http_method_names = ['post', 'options']  # Explicit allow-list
 
     @transaction.atomic
     def post(self, request, provider):

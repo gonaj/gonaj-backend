@@ -29,6 +29,11 @@ INVARIANTS ENFORCED:
 - INV-D2: No cross-contribution linkage beyond timestamps
 - INV-D3: No weakening of post-deletion anonymity
 - INV-D4: No leaking contributor_fingerprint
+
+API BOUNDARY (Phase-2 Sprint-1):
+- User-scoped access only (IsAuthenticated + own data)
+- GET method only (read-only)
+- No mutation
 """
 
 from core.models import ContributionEvent
@@ -74,10 +79,16 @@ class ContributionExportView(APIView):
     Error Responses:
     - 401 Unauthorized: Authentication required
     - 403 Forbidden: Account is deleted/deactivated
+    
+    API BOUNDARY (Phase-2 Sprint-1):
+    - Permission: IsAuthenticated (user can only export own data)
+    - HTTP Methods: GET only
+    - Read-only: No mutation
     """
 
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'options']  # Explicit allow-list
 
     def get(self, request):
         """
