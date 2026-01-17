@@ -183,6 +183,15 @@ class CanonicalReadSerializerBase(serializers.Serializer):
                 f"{self.__class__.__name__} has fields not in allowed_fields: "
                 f"{undeclared}. Add them to Meta.allowed_fields or remove them."
             )
+        
+        # Ensure allowed_fields does not reference undeclared serializer fields
+        extra_allowed = allowed_fields - declared_fields
+        if extra_allowed:
+            raise ValueError(
+                f"{self.__class__.__name__} Meta.allowed_fields contains fields "
+                f"that are not declared on the serializer: {extra_allowed}. "
+                f"Declare these fields or remove them from Meta.allowed_fields."
+            )
     
     def __init__(self, *args, **kwargs):
         """Initialize serializer and validate contract compliance."""

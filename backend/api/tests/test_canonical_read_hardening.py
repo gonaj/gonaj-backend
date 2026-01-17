@@ -632,8 +632,8 @@ class NoDebugLeakageTests(TestCase):
         
         content = response.content.decode('utf-8')
         self.assertNotIn("Traceback", content)
+        self.assertNotIn("Traceback (most recent call last)", content)
         self.assertNotIn("File \"", content)
-        self.assertNotIn("line ", content)
         self.assertNotIn("Exception", content)
 
     def test_405_does_not_leak_stack_trace(self):

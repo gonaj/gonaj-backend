@@ -53,6 +53,7 @@ BLOCKED_EXPORT_FIELDS = frozenset([
     "submitted_at",             # Server timestamp
     "created_at",               # Model timestamp
     "updated_at",               # Model timestamp
+    "moderation_status",        # Internal moderation state
 ])
 
 
