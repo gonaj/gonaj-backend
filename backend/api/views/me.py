@@ -24,6 +24,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.authz import require_capability
+from api.capabilities import Capability
 from api.views.auth import JWTAuthentication, get_client_ip, get_user_agent
 
 
@@ -73,7 +75,14 @@ class AccountDeletionView(APIView):
 
         This is a thin wrapper around AccountDeletionService.
         All deletion logic is in the service.
+        
+        AUTHORIZATION (Phase-2 Sprint-4):
+        Requires contribute capability (authenticated user can mutate own data).
+        Note: This is self-service deletion, user can only delete own account.
         """
+        # Explicit capability check (centralized authorization)
+        require_capability(request, Capability.CONTRIBUTE)
+        
         user = request.user
 
         # Already deleted users handled by service (idempotent)

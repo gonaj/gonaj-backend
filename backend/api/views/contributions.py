@@ -20,6 +20,8 @@ API BOUNDARY (Phase-2 Sprint-1):
 - No anonymous mutation
 """
 
+from api.authz import require_capability
+from api.capabilities import Capability
 from api.permissions import IsContributor
 from api.serializers.contributions import ContributionSubmissionSerializer
 from rest_framework import status
@@ -87,7 +89,13 @@ class ContributionSubmissionView(APIView):
 
         Validates the submission, creates an immutable ContributionEvent,
         and returns a confirmation. Supports idempotent retries.
+        
+        AUTHORIZATION (Phase-2 Sprint-4):
+        Explicitly requires contribute capability via centralized authz module.
         """
+        # Explicit capability check (centralized authorization)
+        require_capability(request, Capability.CONTRIBUTE)
+        
         serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():

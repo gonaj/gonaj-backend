@@ -53,17 +53,26 @@ class AccountDeletionEndpointTestCase(TestCase):
         self.assertIn("tokens_revoked", response.data)
 
     def test_deletion_is_idempotent(self):
-        """Test that deletion is idempotent (can be called twice)."""
+        """
+        Test that deleted users cannot call delete endpoint again.
+        
+        UPDATED (Phase-2 Sprint-4):
+        Authorization now prevents inactive users from mutating.
+        Idempotency at service layer is preserved but not exposed via API.
+        """
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
         # First deletion
         response1 = self.client.delete("/api/me")
         self.assertEqual(response1.status_code, status.HTTP_200_OK)
 
-        # Second deletion (should still succeed, idempotent)
+        # Second deletion should be denied (inactive users cannot mutate)
         response2 = self.client.delete("/api/me")
-        self.assertEqual(response2.status_code, status.HTTP_200_OK)
-        self.assertTrue(response2.data["success"])
+        # DRF may return 403 or 401, both are acceptable for denied access
+        self.assertIn(
+            response2.status_code,
+            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]
+        )
 
     def test_deleted_user_is_deactivated(self):
         """Test that deleted user is marked as inactive."""
