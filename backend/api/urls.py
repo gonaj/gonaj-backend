@@ -28,6 +28,7 @@ from .views.auth import (
     TokenRefreshView,
     TokenRevokeView,
 )
+from .views.canonical import StopDetailView, StopListView
 from .views.contributions import ContributionSubmissionView
 from .views.export import ContributionExportView
 from .views.me import AccountDeletionView
@@ -97,13 +98,18 @@ contribution_urlpatterns = [
 ]
 
 # ============================================================================
-# PUBLIC READ ENDPOINTS (FUTURE)
-# Namespace: /api/v1/stops, /api/v1/routes, etc.
+# PUBLIC CANONICAL READ ENDPOINTS (Phase-2 Sprint-5)
+# Namespace: /api/v1/stops, /api/v1/routes (future), etc.
 # Access Level: ReadOnlyPublic (anonymous read, no mutation)
 # Purpose: Canonical transit data access
-# Status: RESERVED - Not implemented in Sprint-1
+# Versioning: Path-based (/api/v1/*) - frozen for v1
+# Query Surface: v1 freeze - pagination only, no filtering/sorting
 # ============================================================================
-# public_read_urlpatterns = []
+canonical_read_urlpatterns = [
+    # Stop endpoints (v1)
+    path("v1/stops", StopListView.as_view(), name="canonical-stop-list"),
+    path("v1/stops/<str:public_id>", StopDetailView.as_view(), name="canonical-stop-detail"),
+]
 
 # ============================================================================
 # ADMIN/INTERNAL ENDPOINTS (FUTURE)
@@ -125,4 +131,9 @@ contribution_urlpatterns = [
 
 # Combine all active URL patterns
 # Order matters: more specific patterns first
-urlpatterns = auth_urlpatterns + me_urlpatterns + contribution_urlpatterns
+urlpatterns = (
+    auth_urlpatterns
+    + me_urlpatterns
+    + contribution_urlpatterns
+    + canonical_read_urlpatterns
+)
