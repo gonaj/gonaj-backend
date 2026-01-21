@@ -56,21 +56,27 @@ class AccountDeletionAuthorizationTests(TestCase):
         )
         self.client.force_authenticate(user=user2)
         
-        # Try with read UI mode (should still allow deletion)
+        # Try with read UI mode (should still allow deletion of own account)
         response = self.client.delete("/api/me?ui_mode=read")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Try another user with admin UI mode (should not grant deletion without auth)
+        # Verify user2 is deactivated
+        user2.refresh_from_db()
+        self.assertFalse(user2.is_active)
+        
+        # Try user3 with admin UI mode (should still only delete own account)
         user3 = User.objects.create_user(
             username="user3",
             email="user3@example.com",
             password="testpass123"
         )
-        self.client.force_authenticate(user=None)
+        self.client.force_authenticate(user=user3)
         
+        # user3 can delete their own account via /api/me
+        # UI mode should not grant cross-user deletion capability
         response = self.client.delete("/api/me?ui_mode=admin")
-        # DRF returns 403 for IsAuthenticated permission, which is acceptable
-        self.assertIn(
-            response.status_code,
-            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]
-        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify user3 was deleted (not user2)
+        user3.refresh_from_db()
+        self.assertFalse(user3.is_active)

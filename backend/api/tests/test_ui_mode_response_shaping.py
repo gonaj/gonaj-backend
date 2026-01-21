@@ -26,7 +26,6 @@ from api.visibility import (
     UI_MODE_READ,
     UI_MODE_CONTRIBUTOR,
     UI_MODE_ADMIN,
-    DEFAULT_UI_MODE,
     CANONICAL_SAFE_FIELDS,
     CONTRIBUTOR_VISIBLE_FIELDS,
     ADMIN_VISIBLE_FIELDS,
@@ -297,13 +296,18 @@ class VisibilityOnlyInvariantTests(TestCase):
         # Filter to read mode
         read_view = apply_visibility(self.underlying_data, UI_MODE_READ)
         
-        # Filter to admin mode
+        # Filter to admin mode (intermediate step)
         admin_view = apply_visibility(self.underlying_data, UI_MODE_ADMIN)
         
-        # Switching back to read mode should produce same result
+        # Switching back to read mode should produce same result as first time
         read_view_2 = apply_visibility(self.underlying_data, UI_MODE_READ)
         
+        # Verify reversibility: read → admin → read produces same result as just read
         self.assertEqual(read_view, read_view_2)
+        
+        # Verify admin view is different (has more fields)
+        self.assertNotEqual(read_view, admin_view)
+        self.assertIn("confidence_score", admin_view)
     
     def test_filtering_is_idempotent(self):
         """Filtering multiple times produces same result."""

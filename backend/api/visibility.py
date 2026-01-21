@@ -33,7 +33,6 @@ IMPORTANT:
 """
 
 from typing import Any, Dict, List, Union
-from copy import deepcopy
 
 # Allowed UI mode values
 UI_MODE_READ = "read"
