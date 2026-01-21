@@ -19,6 +19,9 @@ CANONICAL READ API HARDENING (Phase-2 Sprint-2):
 
 from rest_framework import permissions
 
+from api.authz import has_capability
+from api.capabilities import Capability
+
 # Pagination constants for canonical read endpoints
 # These prevent unbounded queries and protect against scraping/DoS
 DEFAULT_PAGE_SIZE = 20
@@ -48,23 +51,32 @@ class IsContributor(permissions.BasePermission):
     """
     Allow access only to authenticated users with contributor capability.
     
-    For Phase-2 Sprint-1, all authenticated users are considered contributors.
-    In future sprints, this can be enhanced to check for explicit contributor
-    status or capabilities.
+    DEPRECATED (Phase-2 Sprint-4):
+    This permission class is maintained for backward compatibility.
+    New code should use RequiresCapability(Capability.CONTRIBUTE) instead.
     
-    FUTURE: Check user.has_contributor_capability or similar.
+    CURRENT BEHAVIOR (Phase-2):
+    All authenticated active users are considered contributors.
+    Inactive users (deleted accounts) are denied.
+    
+    FUTURE (Phase-3):
+    This will check for explicit contributor capability from OAuth scopes
+    or user-specific capability grants.
+    
+    MIGRATION GUIDE:
+    Old: permission_classes = [IsContributor]
+    New: permission_classes = [RequiresCapability(Capability.CONTRIBUTE)]
     """
     
-    message = "Contributor capability required."
+    message = "You do not have permission to perform this action."
     
     def has_permission(self, request, view):
         """
-        Allow access only to authenticated users.
+        Allow access only to authenticated active users.
         
-        Currently, all authenticated users can contribute.
-        Future versions may add additional checks.
+        Uses centralized authorization logic from authz module.
         """
-        return request.user and request.user.is_authenticated
+        return has_capability(request, Capability.CONTRIBUTE)
 
 
 class ReadOnlyPublic(permissions.BasePermission):
@@ -135,3 +147,64 @@ class ReadOnlyAuthenticated(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         return request.method in permissions.SAFE_METHODS
+
+
+class RequiresCapability(permissions.BasePermission):
+    """
+    DRF permission class that requires a specific capability.
+    
+    This is a reusable permission class that can be configured with
+    any capability requirement.
+    
+    Usage:
+        class MyView(APIView):
+            permission_classes = [RequiresCapability(Capability.CONTRIBUTE)]
+            
+    Or with custom message:
+        permission_classes = [
+            RequiresCapability(
+                Capability.MODERATE,
+                message="Moderation access required"
+            )
+        ]
+    
+    STYLE GUIDE - Two Ways to Enforce Capabilities:
+    1. DECLARATIVE (DRF permissions): Use this class for view-level boundaries
+    2. IMPERATIVE (require_capability): Use in view methods for explicit checks
+    
+    Prefer IMPERATIVE style for mutation endpoints:
+        def post(self, request):
+            require_capability(request, Capability.CONTRIBUTE)
+            # ... proceed with mutation
+    
+    Use DECLARATIVE style for entire view classes if all methods need same capability.
+    
+    DO NOT mix styles randomly - be consistent within a view/viewset.
+    
+    PHASE-2 SPRINT-4:
+    This permission class enforces capability requirements independently
+    of UI mode. Authorization must succeed or fail regardless of UI mode.
+    """
+    
+    def __init__(self, required_capability: str, message: str = None):
+        """
+        Initialize permission with required capability.
+        
+        Args:
+            required_capability: Capability string (use Capability constants)
+            message: Optional custom error message
+        """
+        self.required_capability = required_capability
+        if message:
+            self.message = message
+        else:
+            self.message = "You do not have permission to perform this action."
+    
+    def has_permission(self, request, view):
+        """
+        Check if request has required capability.
+        
+        Returns:
+            True if capability is present, False otherwise
+        """
+        return has_capability(request, self.required_capability)
