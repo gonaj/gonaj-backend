@@ -173,11 +173,9 @@ class RouteListEndpointTests(TestCase):
         """Verify MAX_PAGE_SIZE enforced."""
         response = self.client.get(f'/api/v1/routes?page_size={MAX_PAGE_SIZE + 50}')
         
-        self.assertLessEqual(
-            response.data['count'],
-            MAX_PAGE_SIZE,
-            f"Page size must not exceed {MAX_PAGE_SIZE}"
-        )
+        # Should reject with 400 when exceeding MAX_PAGE_SIZE
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
     
     def test_pagination_negative_rejected(self):
         """Verify negative page_size rejected."""
