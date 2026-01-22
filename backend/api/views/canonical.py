@@ -432,3 +432,59 @@ class RouteListView(CanonicalReadPaginationMixin, APIView):
             'results': serializer.data,
             'count': len(serializer.data)
         })
+
+
+class RouteDetailView(APIView):
+    """
+    Retrieve a single canonical Route by public_id.
+    
+    GET /api/v1/routes/{public_id}
+    
+    PATH PARAMETERS:
+    - public_id: Stable public identifier for the route (deterministic, stable)
+    
+    QUERY PARAMETERS:
+    - None supported in v1
+    - No relationship expansion (?include=stops, ?include=variants)
+    
+    RESPONSES:
+      * Response format (frozen for v1): {"detail": "Not found."}
+      * DRF default 404 format preserved for consistency with other endpoints
+    - 200 OK: Route found and returned (JSON, stable schema)
+    - 404 Not Found: Route does not exist or is sub-threshold (JSON, no diagnostics)
+    
+    ERROR SAFETY:
+    - 404 responses do not leak:
+      - Whether a route ever existed
+      - Evaluation status
+      - Contributor information
+      - Internal identifiers
+    - All errors are JSON-formatted
+    - No stack traces or diagnostics
+    
+    CACHE SEMANTICS:
+    Cache behavior is undefined in v1.
+    Clients must not rely on cache headers.
+    
+    ACCESS:
+    Public, read-only, anonymous access permitted.
+    """
+    
+    permission_classes = [ReadOnlyPublic]
+    http_method_names = ['get', 'head', 'options']
+    
+    def get(self, request, public_id):
+        """
+        Retrieve a single Route by public_id.
+        
+        Args:
+            public_id (str): Public identifier for the route
+            
+        Returns:
+            200 OK: Route data
+            404 Not Found: Route not found
+        """
+        route = get_object_or_404(Route, public_id=public_id)
+        serializer = RouteSerializer(route)
+        
+        return Response(serializer.data)
