@@ -28,7 +28,12 @@ from .views.auth import (
     TokenRefreshView,
     TokenRevokeView,
 )
-from .views.canonical import StopDetailView, StopListView
+from .views.canonical import (
+    StopDetailView,
+    StopListView,
+    RouteListView,
+    RouteDetailView,
+)
 from .views.contributions import ContributionSubmissionView
 from .views.export import ContributionExportView
 from .views.me import AccountDeletionView
@@ -109,6 +114,10 @@ canonical_read_urlpatterns = [
     # Stop endpoints (v1)
     path("v1/stops", StopListView.as_view(), name="canonical-stop-list"),
     path("v1/stops/<str:public_id>", StopDetailView.as_view(), name="canonical-stop-detail"),
+    
+    # Route endpoints (v1)
+    path("v1/routes", RouteListView.as_view(), name="canonical-route-list"),
+    path("v1/routes/<str:public_id>", RouteDetailView.as_view(), name="canonical-route-detail"),
 ]
 
 # ============================================================================
