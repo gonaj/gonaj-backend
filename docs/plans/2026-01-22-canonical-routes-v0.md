@@ -193,9 +193,7 @@ class RouteListView(CanonicalReadPaginationMixin, APIView):
             if page < 1:
                 return Response(
                     {'error': 'page must be at least 1.'},
-          DETERMINISM INVARIANT: Route list output must remain deterministic across
-        # system restarts given identical DB state. Ordering by public_id guarantees this.
-        #           status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST
                 )
         except (TypeError, ValueError):
             return Response(

@@ -1,7 +1,8 @@
 # Phase-2 Sprint-6 — Canonical Read Endpoints (Routes v0)
 
-> **Completion Date:** 2026-01-22
-> **Sprint Prompt:** `docs/plans/2026-01-22-canonical-routes-v0.md`
+> **Completion Date:** 2026-01-22  
+> **Sprint Prompt:** `docs/06_contributing/copilot_prompts/phase_2/06_canonical_read_routes_v_0.md`  
+> **Sprint Plan:** `docs/plans/2026-01-22-canonical-routes-v0.md`
 
 ---
 
@@ -272,7 +273,7 @@ All error responses from Route canonical endpoints follow a **stable, minimal co
 | Status | Scenario | Response |
 |--------|----------|----------|
 | 404 | Route not found | `{"detail": "Not found."}` |
-| 400 | Invalid page_size | `{"detail": "Invalid page size"}` |
+| 400 | Invalid page_size | `{"error": "Invalid page size"}` |
 | 405 | Method not allowed | `{"detail": "Method not allowed"}` |
 
 Error responses are considered part of the API contract and will not change within v1.

@@ -159,15 +159,14 @@ class RouteSerializer(CanonicalReadSerializerBase):
     route_type = serializers.CharField(
         help_text=(
             "Type of transit service. "
-            "Valid values: bus, tram, metro, rail, ferry, cable, gondola, "
-            "funicular, trolleybus, monorail, other."
+            f"Valid values: {', '.join(Route.RouteType.values)}."
         )
     )
     
     belief_state = serializers.CharField(
         help_text=(
             "Human-readable confidence state. "
-            "Valid values: proposed, active_low, active_high, contested, dormant."
+            f"Valid values: {', '.join(Route.BeliefState.values)}."
         )
     )
     
@@ -367,11 +366,6 @@ class RouteListView(CanonicalReadPaginationMixin, APIView):
     - No Last-Modified guarantees  
     - No Cache-Control stability
     - Caching policy requires explicit v2 definition
-    
-    QUERY SURFACE FREEZE (v1):
-    Query parameter surface is frozen for v1.
-    Only 'page' and 'page_size' are supported.
-    Future query filters (e.g., ?route_type=bus) require explicit version bump.
     
     VERSIONING:
     This is v1 of the canonical Route API.

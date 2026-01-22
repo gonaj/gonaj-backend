@@ -288,6 +288,8 @@ backend/api/tests/
 - `backend/api/serializers/`
 - `backend/api/urls.py`
 - `backend/api/tests/`
+- `backend/transit/models/route.py` (only to add `belief_state` field)
+- `backend/transit/migrations/` (only to add migration for `belief_state` field)
 - Documentation under `docs/05_execution_history/phase_2/`
 
 ---
@@ -296,9 +298,10 @@ backend/api/tests/
 
 - `backend/transit/evaluation/*`
 - `backend/core/models/*`
-- Any migrations
+- Any migrations except for `belief_state` field
 - Contribution creation logic
 - Authorization or visibility internals
+- Route evaluation logic (no changes to confidence calculation)
 
 ---
 
