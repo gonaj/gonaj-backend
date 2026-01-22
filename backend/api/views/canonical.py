@@ -50,7 +50,7 @@ from django.shortcuts import get_object_or_404
 
 from api.permissions import ReadOnlyPublic
 from api.serializers.canonical import CanonicalReadSerializerBase, CanonicalReadPaginationMixin
-from transit.models import Stop
+from transit.models import Stop, Route
 
 
 class StopSerializer(CanonicalReadSerializerBase):
@@ -108,6 +108,71 @@ class StopSerializer(CanonicalReadSerializerBase):
                 'coordinates': [obj.location.x, obj.location.y]
             }
         return None
+
+
+class RouteSerializer(CanonicalReadSerializerBase):
+    """
+    Serializer for canonical Route read endpoints.
+    
+    PUBLIC IDENTIFIER INVARIANTS (API Contract):
+    - public_id is deterministic (same inputs produce same ID)
+    - public_id is stable across re-evaluation and system restarts
+    - public_id is independent of database primary key
+    - public_id is independent of contribution volume or timing
+    - public_id never encodes confidence, evidence count, or internal state
+    
+    Meta.allowed_fields:
+    - public_id: Stable, opaque identifier (see invariants above)
+    - name: Full route name
+    - short_name: Short identifier (e.g., "42", "Red")
+    - route_type: Type of transit service (bus, metro, etc.)
+    - belief_state: Human-readable confidence projection
+    
+    EXPLICITLY BLOCKED:
+    - Internal UUID (id field)
+    - Evidence references
+    - Contributor information
+    - Confidence scores
+    - Timestamps
+    - Operator field (deferred to future versions)
+    - Properties JSON (deferred to future versions)
+    - Related entities (variants, stops)
+    
+    RELATIONSHIP EXPANSION BAN (v1):
+    This serializer never embeds or expands related entities.
+    Any relationship expansion requires a new API version.
+    """
+    
+    public_id = serializers.CharField(
+        help_text="Stable public identifier for this route."
+    )
+    
+    name = serializers.CharField(
+        help_text="Full name of the route."
+    )
+    
+    short_name = serializers.CharField(
+        help_text="Short identifier for the route (e.g., '42', 'A', 'Red').",
+        allow_blank=True
+    )
+    
+    route_type = serializers.CharField(
+        help_text=(
+            "Type of transit service. "
+            "Valid values: bus, tram, metro, rail, ferry, cable, gondola, "
+            "funicular, trolleybus, monorail, other."
+        )
+    )
+    
+    belief_state = serializers.CharField(
+        help_text=(
+            "Human-readable confidence state. "
+            "Valid values: proposed, active_low, active_high, contested, dormant."
+        )
+    )
+    
+    class Meta:
+        allowed_fields = {'public_id', 'name', 'short_name', 'route_type', 'belief_state'}
 
 
 class StopListView(CanonicalReadPaginationMixin, APIView):
