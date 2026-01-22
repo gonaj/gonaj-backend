@@ -96,6 +96,17 @@ Created `RouteSerializer` inheriting from `CanonicalReadSerializerBase`:
 4. **backend/transit/migrations/0003_add_belief_state_to_route.py** (NEW)
    - Migration to add belief_state field to Route model
 
+### Model Mutation Justification
+
+> **Note:** The `belief_state` field was added to the Route model as a **derived, read-only projection** to align Route canonical reads with existing Stop semantics. This does not alter evaluation logic or truth derivation. The field is:
+>
+> - **Derived, not authored** - Calculated from evaluation state, not user input
+> - **Mirroring existing concept** - Matches the Stop model's belief_state field
+> - **Semantics-preserving** - Does not change evaluation logic or introduce mutability
+> - **Read-only exposure** - Never exposed for write operations
+>
+> This addition respects the Phase-2 constraint of not touching evaluation logic while enabling consistent canonical read presentation across entity types.
+
 ---
 
 ## Test Results
@@ -246,6 +257,28 @@ curl http://localhost:8000/api/v1/routes/nonexistent
 
 ---
 
+## Error Semantics
+
+All error responses from Route canonical endpoints follow a **stable, minimal contract**:
+
+- **Format:** JSON-only error objects
+- **Schema:** Standard HTTP semantics (4xx, 5xx)
+- **Content:** Human-readable messages only
+- **No leakage:** No diagnostics, stack traces, internal identifiers, or evaluation details
+- **Stability:** Error schemas are frozen for v1 (breaking changes require new version)
+
+**Common error cases:**
+
+| Status | Scenario | Response |
+|--------|----------|----------|
+| 404 | Route not found | `{"detail": "Not found."}` |
+| 400 | Invalid page_size | `{"detail": "Invalid page size"}` |
+| 405 | Method not allowed | `{"detail": "Method not allowed"}` |
+
+Error responses are considered part of the API contract and will not change within v1.
+
+---
+
 ## Non-Goals Confirmed
 
 This sprint explicitly did NOT:
@@ -339,6 +372,18 @@ All future expansions require:
 - Updated serializers with new `allowed_fields`
 - Comprehensive safety tests
 - Documentation updates
+
+### Cache Semantics (Future Consideration)
+
+> **v1 Position:** Cache behavior is **explicitly undefined** in this version.
+>
+> - No cache headers are currently set
+> - Clients may cache responses at their own risk
+> - Future cache guarantees require explicit API versioning
+>
+> **Rationale:** Once public canonical endpoints exist, clients will cache responses regardless of server directives. By leaving cache semantics undefined in v1, we preserve flexibility to introduce explicit cache contracts (ETags, max-age, validation) in future versions without breaking existing clients.
+>
+> This is recorded as a Phase-2 invariant: **Cache guarantees are a versioned API concern, not a v1 commitment.**
 
 ---
 
