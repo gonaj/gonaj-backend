@@ -322,3 +322,113 @@ class StopDetailView(APIView):
         serializer = StopSerializer(stop)
         
         return Response(serializer.data)
+
+
+class RouteListView(CanonicalReadPaginationMixin, APIView):
+    """
+    List all canonical Routes with pagination.
+    
+    GET /api/v1/routes
+    
+    QUERY PARAMETERS:
+    - page (optional): Page number (1-based, default: 1)
+    - page_size (optional): Number of results per page (default: 20, max: 100)
+    
+    QUERY SURFACE FREEZE (v1):
+    - Only pagination parameters allowed
+    - No filtering, searching, or custom sorting
+    - No route_type filtering
+    - No relationship expansion (?include=stops, ?include=variants)
+    - Unsupported parameters are ignored
+    
+    ORDERING:
+    Results are ordered deterministically by public_id to ensure:
+    - Stable pagination
+    - Reproducible results
+    - No dependency on insertion order or evaluation timing
+    - Ordering does not encode confidence or recency
+    
+    SNAPSHOT SEMANTICS:
+    Each request observes a self-consistent view of canonical data.
+    No guarantees are made across multiple requests.
+    
+    ERROR RESPONSES:
+    - 400 Bad Request: Invalid pagination parameters (JSON format: {"error": "message"})
+    - Errors contain no diagnostics or internal identifiers
+    - Error response schema is frozen for v1:
+      * 400: {"error": "<validation message>"}
+      * All errors are JSON, no HTML or plain text
+    
+    CACHE SEMANTICS:
+    Cache behavior is undefined in v1.
+    Clients must not rely on cache headers or assume cacheability.
+    Specifically:
+    - No ETag guarantees
+    - No Last-Modified guarantees  
+    - No Cache-Control stability
+    - Caching policy requires explicit v2 definition
+    
+    QUERY SURFACE FREEZE (v1):
+    Query parameter surface is frozen for v1.
+    Only 'page' and 'page_size' are supported.
+    Future query filters (e.g., ?route_type=bus) require explicit version bump.
+    
+    VERSIONING:
+    This is v1 of the canonical Route API.
+    
+    ACCESS:
+    Public, read-only, anonymous access permitted.
+    """
+    
+    permission_classes = [ReadOnlyPublic]
+    http_method_names = ['get', 'head', 'options']
+    
+    def get(self, request):
+        """
+        Retrieve paginated list of canonical Routes.
+        
+        Returns:
+            200 OK: Paginated list of routes
+            400 Bad Request: Invalid pagination parameters
+        """
+        try:
+            page_size = self.get_page_size(request)
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Parse and validate page number
+        try:
+            page = int(request.query_params.get('page', 1))
+            if page < 1:
+                return Response(
+                    {'error': 'page must be at least 1.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'Invalid page parameter. Must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calculate offset for pagination
+        offset = (page - 1) * page_size
+        
+        # Deterministic ordering by public_id
+        # This ensures stable pagination and replay safety
+        # DETERMINISM INVARIANT: Route list output must remain deterministic across
+        # system restarts given identical DB state. Ordering by public_id guarantees this.
+        # PERFORMANCE NOTE (v1): Offset-based pagination has O(offset) database query cost
+        # (via SQL LIMIT/OFFSET), which can degrade for large page numbers. Django does not
+        # load all skipped rows into memory. Acceptable for v1 given expected dataset sizes
+        # (<10k routes). Future versions may adopt cursor-based pagination for scalability.
+        routes = Route.objects.all().order_by('public_id')[offset:offset + page_size]
+        
+        serializer = RouteSerializer(routes, many=True)
+        
+        return Response({
+            'results': serializer.data,
+            'count': len(serializer.data)
+        })
