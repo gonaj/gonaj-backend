@@ -26,10 +26,12 @@ from rest_framework.views import APIView
 
 from api.authz import require_capability
 from api.capabilities import Capability
+from api.idempotency import IdempotencyMixin
+from api.throttling import UserWriteThrottle
 from api.views.auth import JWTAuthentication, get_client_ip, get_user_agent
 
 
-class AccountDeletionView(APIView):
+class AccountDeletionView(IdempotencyMixin, APIView):
     """
     API endpoint for irreversible account deletion.
 
@@ -42,6 +44,14 @@ class AccountDeletionView(APIView):
 
     This action is FINAL and cannot be undone.
 
+    Rate Limiting:
+    - User-based throttling (30/minute default, configurable)
+    - Returns HTTP 429 when limit exceeded
+
+    Idempotency:
+    - Idempotency-Key header provides replay protection for retries
+    - Multiple DELETE requests with same key return cached response
+
     Response (200 OK):
     {
         "success": true,
@@ -51,6 +61,8 @@ class AccountDeletionView(APIView):
 
     Error Responses:
     - 401 Unauthorized: Authentication required
+    - 409 Conflict: Idempotency-Key reused with different context
+    - 429 Too Many Requests: Rate limit exceeded
     - 500 Internal Server Error: Deletion failed (should be rare)
 
     INVARIANTS ENFORCED:
@@ -67,6 +79,7 @@ class AccountDeletionView(APIView):
 
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    throttle_classes = [UserWriteThrottle]
     http_method_names = ['delete', 'options']  # Explicit allow-list
 
     def delete(self, request):
@@ -79,7 +92,15 @@ class AccountDeletionView(APIView):
         AUTHORIZATION (Phase-2 Sprint-4):
         Requires contribute capability (authenticated user can mutate own data).
         Note: This is self-service deletion, user can only delete own account.
+        
+        IDEMPOTENCY (Phase-2 Sprint-7):
+        Idempotency-Key header provides replay protection.
         """
+        # Check for cached idempotent response (transport-level)
+        cached_response = self.get_idempotent_response(request)
+        if cached_response is not None:
+            return cached_response
+        
         # Explicit capability check (centralized authorization)
         require_capability(request, Capability.CONTRIBUTE)
         
@@ -95,9 +116,14 @@ class AccountDeletionView(APIView):
         )
 
         if result.success:
-            return Response(result.to_dict(), status=status.HTTP_200_OK)
+            response = Response(result.to_dict(), status=status.HTTP_200_OK)
         else:
-            return Response(
+            response = Response(
                 result.to_dict(),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+        # Store response for transport-level idempotency
+        self.store_idempotent_response(request, response)
+        
+        return response

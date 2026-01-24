@@ -22,14 +22,16 @@ API BOUNDARY (Phase-2 Sprint-1):
 
 from api.authz import require_capability
 from api.capabilities import Capability
+from api.idempotency import IdempotencyMixin
 from api.permissions import IsContributor
 from api.serializers.contributions import ContributionSubmissionSerializer
+from api.throttling import UserWriteThrottle
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 
-class ContributionSubmissionView(APIView):
+class ContributionSubmissionView(IdempotencyMixin, APIView):
     """
     API endpoint for submitting contribution evidence.
 
@@ -44,8 +46,15 @@ class ContributionSubmissionView(APIView):
 
     Authentication: Required (any authenticated user may contribute)
 
-    Idempotency: Submissions with the same client_generated_id return the
-    existing event without creating a duplicate.
+    Idempotency: 
+    - Domain-level: Submissions with the same client_generated_id return the
+      existing event without creating a duplicate.
+    - Transport-level: Idempotency-Key header provides replay protection for
+      retries and network failures (Phase-2 Sprint-7).
+
+    Rate Limiting:
+    - User-based throttling (30/minute default, configurable)
+    - Returns HTTP 429 when limit exceeded
 
     Request Body:
     {
@@ -72,6 +81,8 @@ class ContributionSubmissionView(APIView):
     - 401 Unauthorized: Authentication required
     - 403 Forbidden: Contributor capability required
     - 400 Bad Request: Invalid payload structure or validation failure
+    - 409 Conflict: Idempotency-Key reused with different payload
+    - 429 Too Many Requests: Rate limit exceeded
     
     API BOUNDARY (Phase-2 Sprint-1):
     - Permission: IsContributor (authenticated + contributor capability)
@@ -80,6 +91,7 @@ class ContributionSubmissionView(APIView):
     """
 
     permission_classes = [IsContributor]
+    throttle_classes = [UserWriteThrottle]
     serializer_class = ContributionSubmissionSerializer
     http_method_names = ['post', 'options']  # Explicit allow-list
 
@@ -92,7 +104,16 @@ class ContributionSubmissionView(APIView):
         
         AUTHORIZATION (Phase-2 Sprint-4):
         Explicitly requires contribute capability via centralized authz module.
+        
+        IDEMPOTENCY (Phase-2 Sprint-7):
+        - Domain-level: client_generated_id prevents duplicate events
+        - Transport-level: Idempotency-Key header for replay protection
         """
+        # Check for cached idempotent response (transport-level)
+        cached_response = self.get_idempotent_response(request)
+        if cached_response is not None:
+            return cached_response
+        
         # Explicit capability check (centralized authorization)
         require_capability(request, Capability.CONTRIBUTE)
         
@@ -109,7 +130,7 @@ class ContributionSubmissionView(APIView):
         validated_data = serializer.validated_data
         validated_data["contributor"] = request.user
 
-        # Create the event (idempotent)
+        # Create the event (idempotent via client_generated_id)
         event = serializer.create(validated_data)
 
         # Return appropriate status code
@@ -120,4 +141,9 @@ class ContributionSubmissionView(APIView):
             else status.HTTP_200_OK
         )
 
-        return Response(serializer.to_representation(event), status=response_status)
+        response = Response(serializer.to_representation(event), status=response_status)
+        
+        # Store response for transport-level idempotency
+        self.store_idempotent_response(request, response)
+        
+        return response

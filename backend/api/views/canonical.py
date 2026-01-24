@@ -50,6 +50,7 @@ from django.shortcuts import get_object_or_404
 
 from api.permissions import ReadOnlyPublic
 from api.serializers.canonical import CanonicalReadSerializerBase, CanonicalReadPaginationMixin
+from api.throttling import AnonReadThrottle
 from transit.models import Stop, Route
 
 
@@ -218,6 +219,7 @@ class StopListView(CanonicalReadPaginationMixin, APIView):
     """
     
     permission_classes = [ReadOnlyPublic]
+    throttle_classes = [AnonReadThrottle]
     http_method_names = ['get', 'head', 'options']
     
     def get(self, request):
@@ -304,6 +306,7 @@ class StopDetailView(APIView):
     """
     
     permission_classes = [ReadOnlyPublic]
+    throttle_classes = [AnonReadThrottle]
     http_method_names = ['get', 'head', 'options']
     
     def get(self, request, public_id):
@@ -375,6 +378,7 @@ class RouteListView(CanonicalReadPaginationMixin, APIView):
     """
     
     permission_classes = [ReadOnlyPublic]
+    throttle_classes = [AnonReadThrottle]
     http_method_names = ['get', 'head', 'options']
     
     def get(self, request):
@@ -465,6 +469,7 @@ class RouteDetailView(APIView):
     """
     
     permission_classes = [ReadOnlyPublic]
+    throttle_classes = [AnonReadThrottle]
     http_method_names = ['get', 'head', 'options']
     
     def get(self, request, public_id):
