@@ -25,7 +25,7 @@ from api.abuse_signals import (
 from core.models import ContributionEvent
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -107,6 +107,22 @@ class AbuseSignalCollectorTests(TestCase):
 
         # Should not raise
         self.collector.record_submission(request, validated_data, fingerprint)
+
+    def test_record_contribution_signals_wrapper(self):
+        """Public wrapper function works and does not raise."""
+        request = MagicMock()
+        request.user = self.user
+        
+        validated_data = {
+            'contribution_type': 'stop_exists',
+            'subject_ref': {'lat': 40.7, 'lon': -74.0},
+            'payload': {'confidence': 'high'},
+        }
+        fingerprint = uuid.uuid4()
+        
+        # Call the public wrapper function (imported from module)
+        # This covers the 'missing test' for the unused import
+        record_contribution_signals(request, validated_data, fingerprint)
 
     @patch('api.abuse_signals.cache')
     def test_cache_failure_is_silently_tolerated(self, mock_cache):

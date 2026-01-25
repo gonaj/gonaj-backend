@@ -8,7 +8,7 @@ Implemented observational-only abuse signal collection for contribution submissi
 
 ### New Files
 - `backend/api/abuse_signals.py` - `AbuseSignalCollector` class with velocity, repetition, and fingerprint correlation signals
-- `backend/api/tests/test_abuse_signals.py` - 10 tests covering safe failure, cache increments, and non-interference
+- `backend/api/tests/test_abuse_signals.py` - 11 tests covering safe failure, cache increments, and non-interference
 
 ### Modified Files
 - `backend/api/views/contributions.py` - Integrated `record_contribution_signals` call after event creation
@@ -25,7 +25,7 @@ Implemented observational-only abuse signal collection for contribution submissi
 ## Testing Results
 
 ```
-Ran 10 tests (abuse signals) - OK
+Ran 11 tests (abuse signals) - OK
 Ran 18 tests (contribution API) - OK
 ```
 
