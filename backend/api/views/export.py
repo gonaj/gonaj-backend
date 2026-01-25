@@ -124,14 +124,6 @@ class ContributionExportView(APIView):
 
         user = request.user
 
-        # Check if account is deactivated (deleted)
-        # Deleted users have is_active=False
-        if not user.is_active:
-            return Response(
-                {"error": "Account is deactivated. Export is not available."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         # Query user's contributions
         # Order by submitted_at ASC for reproducibility (frozen v1 behavior)
         # Secondary order by id for determinism when submitted_at is equal
