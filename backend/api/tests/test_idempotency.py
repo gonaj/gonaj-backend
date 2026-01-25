@@ -25,8 +25,6 @@ INVARIANTS TESTED:
 """
 
 import uuid
-import hashlib
-import json
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -276,13 +274,13 @@ class IdempotencyKeyAccountDeletionTests(APITestCase):
         """Clean up after tests."""
         cache.clear()
 
-    def test_same_key_returns_cached_deletion_response(self):
-        """Test that replaying DELETE with same Idempotency-Key returns cached response."""
+    def test_different_users_can_reuse_key_for_deletion(self):
+        """Test that different users can use the same Idempotency-Key (namespaces)."""
         self.client.force_authenticate(user=self.user)
         
         idempotency_key = str(uuid.uuid4())
         
-        # First request
+        # First request (User 1)
         response1 = self.client.delete(
             self.account_deletion_url,
             HTTP_IDEMPOTENCY_KEY=idempotency_key
@@ -304,6 +302,49 @@ class IdempotencyKeyAccountDeletionTests(APITestCase):
         )
         self.assertEqual(response2.status_code, status.HTTP_200_OK)
 
+    def test_same_user_replay_deletion_returns_cached_response(self):
+        """Test that replaying DELETE with same user and key returns cached response."""
+        self.client.force_authenticate(user=self.user)
+        idempotency_key = str(uuid.uuid4())
+
+        # First request
+        response1 = self.client.delete(
+            self.account_deletion_url,
+            HTTP_IDEMPOTENCY_KEY=idempotency_key
+        )
+        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+
+        # This tests that if a user sends a DELETE request with an Idempotency-Key,
+        # and then sends the exact same request again (replay), the system recognizes
+        # the duplicate key and returns the stored response from the first successful
+        # deletion, rather than trying to delete the account again.
+        #
+        # The "Magic" in the Test:
+        # In a real-world scenario (using JWTs):
+        # 1. First Request: Deletes account. User becomes inactive (is_active=False).
+        #    Tokens are revoked.
+        # 2. Second Request (Replay):
+        #    Authentication Layer runs.
+        #    It sees the token is invalid (revoked) OR the user is inactive.
+        #    Request fails with 401 Unauthorized. The Idempotency check (which runs
+        #    after Auth) is never reached.
+        #
+        # However, in the test environment using force_authenticate(user=user):
+        # - Django's test client forces the request.user to be the user object you
+        #   provided, bypassing the standard token/database checks that would normally
+        #   block an inactive user.
+        # - This allows the request to pass Authentication and reach the Idempotency
+        #   Middleware.
+        # - The middleware sees the Idempotency-Key and returns the cached 200 OK response.
+        
+        # Second request (Replay)
+        response2 = self.client.delete(
+            self.account_deletion_url,
+            HTTP_IDEMPOTENCY_KEY=idempotency_key
+        )
+        
+        # Should return cached response
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
 
 class IdempotencyKeyAuthorizationTests(APITestCase):
     """Test that idempotency does NOT bypass authorization."""

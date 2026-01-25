@@ -88,7 +88,7 @@ class IdempotencyMixin:
     
     Behavior:
     - If Idempotency-Key header is present:
-      - Same key + same payload: Return cached response (200 OK)
+      - Same key + same payload: Return cached response (original status code)
       - Same key + different payload: Return 409 Conflict
     - If Idempotency-Key header is missing:
       - Normal non-idempotent behavior

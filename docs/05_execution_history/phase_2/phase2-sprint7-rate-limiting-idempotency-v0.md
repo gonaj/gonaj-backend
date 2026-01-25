@@ -55,7 +55,7 @@ Implemented user-based throttling for authenticated write endpoints:
 Implemented transport-level replay protection via `Idempotency-Key` header:
 
 **Behavior:**
-- Same key + same payload → Cached response returned (200 OK)
+- Same key + same payload → Cached response returned (original status code)
 - Same key + different payload → 409 Conflict
 - No key → Normal non-idempotent behavior
 
@@ -143,8 +143,9 @@ All tests pass (314 total):
 - Idempotency does not leak internal state
 - Different users have separate namespaces
 
-**IdempotencyKeyAccountDeletionTests** (1 test):
-- Same key returns cached deletion response
+**IdempotencyKeyAccountDeletionTests** (2 tests):
+- Different users can reuse key (namespaces)
+- Same user replay returns cached deletion response
 
 **IdempotencyKeyAuthorizationTests** (1 test):
 - Idempotency key does not bypass auth
