@@ -5,7 +5,7 @@ This test suite validates that canonical read endpoints are:
 - Safe for anonymous access (where permitted)
 - Do not leak evidence or internal data
 - Stable under malformed parameters
-- Properly paginated and bounded
+- Properly bounded
 
 INVARIANTS TESTED:
 - Canonical data is the only data exposed to anonymous users
@@ -16,6 +16,11 @@ INVARIANTS TESTED:
 PHILOSOPHY:
 These tests prove safety, not functionality. They validate that the API
 cannot be abused to extract internal state or overwhelm the system.
+
+SPRINT-9 UPDATE:
+Export endpoint moved to /api/v1/me/contributions/export with v1 frozen semantics:
+- Atomic, complete, non-paginated, non-filterable
+- No query parameters alter output
 """
 
 import uuid
@@ -29,6 +34,9 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 User = get_user_model()
+
+# Export endpoint URL (v1 frozen)
+EXPORT_URL = "/api/v1/me/contributions/export"
 
 
 class AnonymousSafetyTests(TestCase):
@@ -61,7 +69,7 @@ class AnonymousSafetyTests(TestCase):
 
     def test_anonymous_cannot_access_contribution_export(self):
         """Anonymous users cannot export contributions."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertIn(
             response.status_code,
@@ -87,7 +95,7 @@ class AnonymousSafetyTests(TestCase):
         from the response for an existing user (both rejected).
         """
         # Request for authenticated endpoint without auth
-        response1 = self.client.get("/api/me/contributions/export")
+        response1 = self.client.get(EXPORT_URL)
         
         # The error response should not indicate anything about user existence
         self.assertIn(
@@ -120,7 +128,6 @@ class SerializerLeakageTests(TestCase):
         self.client.force_authenticate(user=self.user)
         
         # Create contributions with all fields populated
-        # contributor_fingerprint is required for evaluation identity
         self.contribution = ContributionEvent.objects.create(
             client_generated_id=uuid.uuid4(),
             contributor=self.user,
@@ -135,7 +142,7 @@ class SerializerLeakageTests(TestCase):
 
     def test_export_does_not_leak_internal_id(self):
         """Export should not include internal UUID id."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -145,18 +152,9 @@ class SerializerLeakageTests(TestCase):
         for contribution in contributions:
             self.assertNotIn("id", contribution)
 
-    def test_export_does_not_leak_client_generated_id(self):
-        """Export should not include client_generated_id."""
-        response = self.client.get("/api/me/contributions/export")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        for contribution in response.data.get("contributions", []):
-            self.assertNotIn("client_generated_id", contribution)
-
     def test_export_does_not_leak_contributor_fingerprint(self):
         """Export should not include contributor_fingerprint (INV-D4)."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -165,7 +163,7 @@ class SerializerLeakageTests(TestCase):
 
     def test_export_does_not_leak_device_id(self):
         """Export should not include device_id."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -174,25 +172,16 @@ class SerializerLeakageTests(TestCase):
 
     def test_export_does_not_leak_context(self):
         """Export should not include context metadata."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         for contribution in response.data.get("contributions", []):
             self.assertNotIn("context", contribution)
 
-    def test_export_does_not_leak_submitted_at(self):
-        """Export should not include server-generated submitted_at."""
-        response = self.client.get("/api/me/contributions/export")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        for contribution in response.data.get("contributions", []):
-            self.assertNotIn("submitted_at", contribution)
-
     def test_export_does_not_leak_contributor_reference(self):
         """Export should not include contributor or contributor_id."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -201,13 +190,16 @@ class SerializerLeakageTests(TestCase):
             self.assertNotIn("contributor_id", contribution)
 
     def test_export_only_contains_whitelisted_fields(self):
-        """Export should contain ONLY the whitelisted fields."""
-        response = self.client.get("/api/me/contributions/export")
+        """Export should contain ONLY the whitelisted fields (v1)."""
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Allowed fields in export
-        allowed_fields = {"observed_at", "contribution_type", "subject_ref", "payload"}
+        # v1 allowed fields in export
+        allowed_fields = {
+            "contribution_id", "contribution_type", "observed_at",
+            "submitted_at", "subject_ref", "payload"
+        }
         
         for contribution in response.data.get("contributions", []):
             actual_fields = set(contribution.keys())
@@ -243,124 +235,16 @@ class SerializerLeakageTests(TestCase):
         self.assertNotIn("privacy_consent_ts", response.data)
 
 
-class MalformedParameterTests(TestCase):
+class ExportV1SemanticsTests(TestCase):
     """
-    Test that endpoints are stable under malformed or hostile parameters.
+    Test that v1 export is atomic, complete, non-paginated, non-filterable.
     
-    REQUIREMENT: Malformed parameters result in safe defaults or
-    clear error responses, never crashes or data leaks.
+    REQUIREMENT: Export v1 returns all data in single response.
+    Query parameters do not alter output.
     """
 
     def setUp(self):
-        """Set up authenticated client."""
-        self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        self.client.force_authenticate(user=self.user)
-        
-        # Create some contributions
-        for i in range(25):
-            ContributionEvent.objects.create(
-                client_generated_id=uuid.uuid4(),
-                contributor=self.user,
-                contributor_fingerprint=self.user.id,
-                contribution_type="stop_exists",
-                subject_ref={"lat": 40.7, "lon": -74.0},
-                payload={"confidence": "high"},
-                observed_at=timezone.now() - timedelta(hours=i),
-            )
-
-    def test_export_with_negative_page(self):
-        """Negative page number should default to 1."""
-        response = self.client.get("/api/me/contributions/export?page=-5")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page"], 1)
-
-    def test_export_with_zero_page(self):
-        """Zero page number should default to 1."""
-        response = self.client.get("/api/me/contributions/export?page=0")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page"], 1)
-
-    def test_export_with_non_numeric_page(self):
-        """Non-numeric page should default to 1."""
-        response = self.client.get("/api/me/contributions/export?page=abc")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page"], 1)
-
-    def test_export_with_very_large_page(self):
-        """Very large page number should return empty results."""
-        response = self.client.get("/api/me/contributions/export?page=999999")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["contributions"]), 0)
-
-    def test_export_with_negative_page_size(self):
-        """Negative page_size should use default."""
-        response = self.client.get("/api/me/contributions/export?page_size=-10")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should use default page size (20)
-        self.assertEqual(response.data["pagination"]["page_size"], 20)
-
-    def test_export_with_zero_page_size(self):
-        """Zero page_size should use default."""
-        response = self.client.get("/api/me/contributions/export?page_size=0")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page_size"], 20)
-
-    def test_export_with_oversized_page_size(self):
-        """Page size exceeding maximum should be capped."""
-        response = self.client.get("/api/me/contributions/export?page_size=1000")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should be capped at MAX_PAGE_SIZE (100)
-        self.assertEqual(response.data["pagination"]["page_size"], 100)
-
-    def test_export_with_non_numeric_page_size(self):
-        """Non-numeric page_size should use default."""
-        response = self.client.get("/api/me/contributions/export?page_size=invalid")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page_size"], 20)
-
-    def test_export_with_sql_injection_attempt(self):
-        """SQL injection attempts should be safely handled."""
-        response = self.client.get(
-            "/api/me/contributions/export?page=1;DROP TABLE contributions;"
-        )
-        
-        # Should not crash, should use safe default
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page"], 1)
-
-    def test_export_with_special_characters_in_params(self):
-        """Special characters should not cause errors."""
-        response = self.client.get(
-            "/api/me/contributions/export?page=<script>alert(1)</script>"
-        )
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["page"], 1)
-
-
-class PaginationBoundingTests(TestCase):
-    """
-    Test that pagination is properly bounded to prevent DoS.
-    
-    REQUIREMENT: Unbounded queries are rejected. Pagination defaults
-    are enforced. Maximum page sizes are respected.
-    """
-
-    def setUp(self):
-        """Set up authenticated client with many contributions."""
+        """Set up authenticated client with contributions."""
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="testuser",
@@ -370,90 +254,46 @@ class PaginationBoundingTests(TestCase):
         self.client.force_authenticate(user=self.user)
         
         # Create many contributions
-        for i in range(150):
+        for i in range(50):
             ContributionEvent.objects.create(
                 client_generated_id=uuid.uuid4(),
                 contributor=self.user,
                 contributor_fingerprint=self.user.id,
                 contribution_type="stop_exists",
                 subject_ref={"lat": 40.7, "lon": -74.0},
-                payload={"confidence": "high"},
-                observed_at=timezone.now() - timedelta(minutes=i),
+                payload={"index": i},
+                observed_at=timezone.now() - timedelta(hours=i),
             )
 
-    def test_export_has_pagination_metadata(self):
-        """Export response should include pagination metadata."""
-        response = self.client.get("/api/me/contributions/export")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("pagination", response.data)
-        
-        pagination = response.data["pagination"]
-        self.assertIn("page", pagination)
-        self.assertIn("page_size", pagination)
-        self.assertIn("total_count", pagination)
-        self.assertIn("total_pages", pagination)
-        self.assertIn("has_next", pagination)
-        self.assertIn("has_previous", pagination)
-
-    def test_export_default_page_size(self):
-        """Default page size should be 20."""
-        response = self.client.get("/api/me/contributions/export")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["contributions"]), 20)
-        self.assertEqual(response.data["pagination"]["page_size"], 20)
-
-    def test_export_respects_custom_page_size(self):
-        """Custom page size within bounds should be respected."""
-        response = self.client.get("/api/me/contributions/export?page_size=50")
+    def test_export_returns_all_contributions(self):
+        """v1 export returns all contributions without pagination."""
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["contributions"]), 50)
-        self.assertEqual(response.data["pagination"]["page_size"], 50)
 
-    def test_export_caps_page_size_at_maximum(self):
-        """Page size should be capped at MAX_PAGE_SIZE (100)."""
-        response = self.client.get("/api/me/contributions/export?page_size=500")
+    def test_export_ignores_pagination_parameters(self):
+        """v1 export ignores page/page_size parameters."""
+        response = self.client.get(f"{EXPORT_URL}?page=2&page_size=10")
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["contributions"]), 100)
-        self.assertEqual(response.data["pagination"]["page_size"], 100)
+        # Should still return all 50, not paginated subset
+        self.assertEqual(len(response.data["contributions"]), 50)
 
-    def test_export_pagination_navigation(self):
-        """Pagination navigation flags should be correct."""
-        # First page
-        response = self.client.get("/api/me/contributions/export?page=1&page_size=50")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertFalse(response.data["pagination"]["has_previous"])
-        self.assertTrue(response.data["pagination"]["has_next"])
+    def test_export_ignores_filter_parameters(self):
+        """v1 export ignores filter parameters."""
+        response = self.client.get(f"{EXPORT_URL}?contribution_type=stop_name")
         
-        # Middle page
-        response = self.client.get("/api/me/contributions/export?page=2&page_size=50")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["pagination"]["has_previous"])
-        self.assertTrue(response.data["pagination"]["has_next"])
-        
-        # Last page
-        response = self.client.get("/api/me/contributions/export?page=3&page_size=50")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["pagination"]["has_previous"])
-        self.assertFalse(response.data["pagination"]["has_next"])
+        # Should still return all 50 stop_exists contributions
+        self.assertEqual(len(response.data["contributions"]), 50)
 
-    def test_export_total_count_accuracy(self):
-        """Total count should be accurate."""
-        response = self.client.get("/api/me/contributions/export")
+    def test_export_has_no_pagination_metadata(self):
+        """v1 export does not include pagination metadata."""
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["pagination"]["total_count"], 150)
-
-    def test_export_cannot_retrieve_all_at_once(self):
-        """Cannot retrieve all 150 items in a single request."""
-        response = self.client.get("/api/me/contributions/export?page_size=200")
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should be capped at 100
-        self.assertEqual(len(response.data["contributions"]), 100)
+        self.assertNotIn("pagination", response.data)
 
 
 class HttpMethodEnforcementTests(TestCase):
@@ -475,34 +315,22 @@ class HttpMethodEnforcementTests(TestCase):
 
     def test_export_rejects_post(self):
         """POST on export endpoint should return 405."""
-        response = self.client.post(
-            "/api/me/contributions/export",
-            {},
-            format="json"
-        )
+        response = self.client.post(EXPORT_URL, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_export_rejects_put(self):
         """PUT on export endpoint should return 405."""
-        response = self.client.put(
-            "/api/me/contributions/export",
-            {},
-            format="json"
-        )
+        response = self.client.put(EXPORT_URL, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_export_rejects_patch(self):
         """PATCH on export endpoint should return 405."""
-        response = self.client.patch(
-            "/api/me/contributions/export",
-            {},
-            format="json"
-        )
+        response = self.client.patch(EXPORT_URL, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_export_rejects_delete(self):
         """DELETE on export endpoint should return 405."""
-        response = self.client.delete("/api/me/contributions/export")
+        response = self.client.delete(EXPORT_URL)
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_profile_rejects_post(self):
@@ -555,19 +383,23 @@ class OutputSchemaStabilityTests(TestCase):
         )
 
     def test_export_schema_is_stable(self):
-        """Export response schema should be consistent."""
-        response = self.client.get("/api/me/contributions/export")
+        """Export response schema should be consistent (v1)."""
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Required top-level fields
+        # Required top-level fields (v1)
         self.assertIn("export_version", response.data)
-        self.assertIn("contribution_count", response.data)
+        self.assertIn("generated_at", response.data)
+        self.assertIn("user", response.data)
         self.assertIn("contributions", response.data)
-        self.assertIn("pagination", response.data)
         
-        # Export version should be stable
-        self.assertEqual(response.data["export_version"], "1.0")
+        # Export version should be v1
+        self.assertEqual(response.data["export_version"], "v1")
+        
+        # User section should have expected fields
+        self.assertIn("user_id", response.data["user"])
+        self.assertIn("created_at", response.data["user"])
 
     def test_profile_schema_is_stable(self):
         """Profile response schema should be consistent."""
@@ -592,7 +424,7 @@ class OutputSchemaStabilityTests(TestCase):
         )
 
     def test_empty_export_has_correct_schema(self):
-        """Empty export should still have correct schema."""
+        """Empty export should still have correct schema (v1)."""
         # Create a new user with no contributions
         user2 = User.objects.create_user(
             username="emptyuser",
@@ -601,13 +433,13 @@ class OutputSchemaStabilityTests(TestCase):
         )
         self.client.force_authenticate(user=user2)
         
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["export_version"], "1.0")
-        self.assertEqual(response.data["contribution_count"], 0)
+        self.assertEqual(response.data["export_version"], "v1")
         self.assertEqual(response.data["contributions"], [])
-        self.assertIn("pagination", response.data)
+        self.assertIn("user", response.data)
+        self.assertIn("generated_at", response.data)
 
 
 class NoDebugLeakageTests(TestCase):
@@ -645,7 +477,7 @@ class NoDebugLeakageTests(TestCase):
         )
         self.client.force_authenticate(user=user)
         
-        response = self.client.delete("/api/me/contributions/export")
+        response = self.client.delete(EXPORT_URL)
         
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         

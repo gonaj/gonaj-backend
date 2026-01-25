@@ -72,15 +72,26 @@ auth_urlpatterns = [
 # USER SELF-SERVICE ENDPOINTS (DATA_RIGHTS_V1)
 # Namespace: /api/me/*
 # Access Level: IsAuthenticated (user-scoped, own data only)
-# Purpose: User data rights (access, deletion, export)
+# Purpose: User data rights (account deletion)
 # Security Boundary: No cross-user access possible
 # ============================================================================
 me_urlpatterns = [
     # Account deletion (irreversible)
     path("me", AccountDeletionView.as_view(), name="me"),  # DELETE only
-    # Contribution export (data portability)
+]
+
+# ============================================================================
+# VERSIONED USER SELF-SERVICE ENDPOINTS (DATA_RIGHTS_V1)
+# Namespace: /api/v1/me/*
+# Access Level: IsAuthenticated (user-scoped, own data only)
+# Purpose: User data rights (export)
+# Security Boundary: No cross-user access possible
+# Version: v1 frozen - atomic, complete, non-paginated, non-filterable
+# ============================================================================
+v1_me_urlpatterns = [
+    # Contribution export (data portability) - v1 frozen semantics
     path(
-        "me/contributions/export",
+        "v1/me/contributions/export",
         ContributionExportView.as_view(),
         name="contribution-export",
     ),
@@ -143,6 +154,7 @@ canonical_read_urlpatterns = [
 urlpatterns = (
     auth_urlpatterns
     + me_urlpatterns
+    + v1_me_urlpatterns
     + contribution_urlpatterns
     + canonical_read_urlpatterns
 )

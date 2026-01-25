@@ -1,89 +1,91 @@
 """
-Serializers for contribution export (Sprint-5C).
+Serializers for user data export (Sprint-9, Phase-2).
 
-This module provides a dedicated serializer for exporting user contributions
-as part of DATA_RIGHTS_V1 compliance (Right to Data Access).
+This module provides the contribution export serializer as part of
+DATA_RIGHTS_V1 compliance (Right to Data Access).
 
 PHILOSOPHY:
-Export is about user rights, not system introspection. Users should receive
-only the data they directly submitted, in a format that doesn't reveal
-internal system mechanics.
+Export is a user right, not system introspection. Users receive
+all their own data in a deterministic, reproducible format.
+
+EXPORT V1 SEMANTICS (FROZEN):
+- Atomic: Complete dataset in single response
+- Non-paginated: All contributions returned
+- Non-filterable: No query parameters alter output
+- Deterministic: Same data produces identical output (except generated_at)
+
+Any change to these semantics requires a new export version.
 
 WHAT IS EXPORTED:
-- Timestamps (observed_at only - user-provided)
-- Geometry / coordinates as submitted
-- Evidence type
-- Raw payload submitted by user
+- User metadata (user_id, account creation date)
+- Contribution records (id, type, timestamps, payload)
 
-WHAT IS EXPLICITLY EXCLUDED (INV-D1, INV-D4):
+WHAT IS EXPLICITLY EXCLUDED:
 - contributor_fingerprint (internal evaluation identifier)
-- Internal server-generated UUIDs (id, client_generated_id)
-- Canonical IDs (Stop IDs, Route IDs)
+- device_id (internal tracking)
+- context (system metadata)
+- Canonical entities (Stops, Routes)
 - Evaluation artifacts
 - Moderation artifacts
-- submitted_at (server-generated, not user-provided)
-- device_id (internal tracking)
-- context (system metadata, not user content)
 
 INVARIANTS ENFORCED:
-- INV-D1: Export must not expose system-internal identifiers
-- INV-D2: Export must not enable cross-contribution linkage beyond timestamps
-- INV-D3: Export must not weaken post-deletion anonymity
-- INV-D4: Export must not leak contributor_fingerprint
-
-CANONICAL READ HARDENING (Phase-2 Sprint-2):
-- Explicit field whitelist (not blacklist)
-- No field can be added without explicit review
-- Serializer validates output schema
+- P2-INV-8: User data rights preserved
+- INV-D1: No system-internal identifiers (except user-generated contribution_id)
+- INV-D4: No leaking contributor_fingerprint
 """
 
+from django.utils import timezone
 from rest_framework import serializers
 
 
 # BLOCKED FIELDS - These must NEVER appear in export output
-# Phase-2 Sprint-2: Explicit documentation of forbidden fields
 BLOCKED_EXPORT_FIELDS = frozenset([
-    "id",                       # Server-generated UUID
-    "client_generated_id",      # Internal idempotency key
+    "id",                       # Server-generated UUID (internal)
     "contributor",              # User reference (FK)
-    "contributor_id",           # User ID
+    "contributor_id",           # User ID (FK)
     "contributor_fingerprint",  # Evaluation identity (INV-D4)
     "device_id",                # Internal tracking
     "context",                  # System metadata
-    "submitted_at",             # Server timestamp
-    "created_at",               # Model timestamp
-    "updated_at",               # Model timestamp
+    "created_at",               # Model timestamp (internal)
+    "updated_at",               # Model timestamp (internal)
     "moderation_status",        # Internal moderation state
 ])
 
 
 class ContributionExportSerializer(serializers.Serializer):
     """
-    Dedicated serializer for exporting user contributions.
+    Serializer for individual contribution records in export.
 
-    This serializer explicitly whitelists only user-supplied fields.
-    It is intentionally NOT a ModelSerializer to prevent accidental
-    inclusion of internal fields.
+    Exports user-facing data only. Uses explicit whitelist approach.
 
-    CRITICAL: This serializer must NEVER include:
-    - contributor_fingerprint
-    - id (server-generated)
-    - client_generated_id (internal idempotency key)
-    - device_id (internal tracking)
-    - context (system metadata)
-    - submitted_at (server timestamp)
+    INCLUDED FIELDS (v1):
+    - contribution_id: User-generated idempotency key (client_generated_id)
+    - contribution_type: Type of observation
+    - observed_at: When user observed this (user-provided)
+    - submitted_at: When server received this (GDPR requires receipt time)
+    - subject_ref: What this contribution is about
+    - payload: Raw evidence data
 
-    Only fields the user explicitly provided are exported.
+    EXCLUDED FIELDS:
+    - id (server-generated, internal)
+    - contributor_fingerprint (evaluation identity)
+    - device_id, context (internal tracking)
     """
 
-    # === User-Provided Fields Only ===
+    contribution_id = serializers.UUIDField(
+        help_text="User-generated idempotency key for this contribution."
+    )
+
+    contribution_type = serializers.CharField(
+        help_text="Type of observation submitted."
+    )
 
     observed_at = serializers.DateTimeField(
         help_text="When the user observed this (user-provided timestamp)."
     )
 
-    contribution_type = serializers.CharField(
-        help_text="Type of observation submitted."
+    submitted_at = serializers.DateTimeField(
+        help_text="When the server received this contribution."
     )
 
     subject_ref = serializers.JSONField(
@@ -98,56 +100,69 @@ class ContributionExportSerializer(serializers.Serializer):
         """
         Convert a ContributionEvent to export format.
 
-        This method explicitly extracts only whitelisted fields.
-        Any internal identifiers are intentionally omitted.
-        
-        Phase-2 Sprint-2: Explicit whitelist approach for canonical read hardening.
+        Uses explicit whitelist - only listed fields are exported.
         """
-        # Explicit whitelist - only these fields can be exported
-        # Adding new fields requires explicit code change and review
         result = {
-            "observed_at": instance.observed_at.isoformat(),
+            "contribution_id": str(instance.client_generated_id),
             "contribution_type": instance.contribution_type,
+            "observed_at": instance.observed_at.isoformat(),
+            "submitted_at": instance.submitted_at.isoformat(),
             "subject_ref": instance.subject_ref,
             "payload": instance.payload,
         }
-        
-        # Phase-2 Sprint-2: Validate no blocked fields leaked
-        # This is a defense-in-depth check
+
+        # Defense-in-depth: verify no blocked fields leaked
         for key in result.keys():
             if key in BLOCKED_EXPORT_FIELDS:
                 raise ValueError(
                     f"SECURITY: Blocked field '{key}' in export output. "
                     "This is a programming error."
                 )
-        
+
         return result
 
 
 class ContributionExportListSerializer(serializers.Serializer):
     """
-    Wrapper serializer for the full export response.
+    Wrapper serializer for the complete export response.
 
-    Provides metadata about the export along with the contributions.
-    This serializer manually builds output in to_representation()
-    rather than using declared fields, to maintain explicit control
-    over the export structure.
+    Provides metadata about the export along with contributions.
+
+    EXPORT V1 ENVELOPE:
+    - export_version: "v1" (frozen)
+    - generated_at: ISO-8601 timestamp of export generation
+    - user: Informational section (user_id, created_at)
+    - contributions: List of contribution records
+
+    NOTE: The export endpoint is only accessible to users with the
+    required capabilities (i.e., not deleted users). The user section
+    contains minimal metadata (user_id and account creation date),
+    which may be retained for compliance purposes in the data model.
     """
 
-    def to_representation(self, contributions):
+    def to_representation(self, data):
         """
         Build the complete export response.
 
         Args:
-            contributions: QuerySet or list of ContributionEvent objects
+            data: Dict with 'contributions' queryset and 'user' object
 
         Returns:
-            Dictionary with export metadata and contribution list
+            Complete export envelope with metadata and contributions
         """
-        contribution_serializer = ContributionExportSerializer(contributions, many=True)
+        contributions = data.get("contributions", [])
+        user = data.get("user")
+
+        contribution_serializer = ContributionExportSerializer(
+            contributions, many=True
+        )
 
         return {
-            "export_version": "1.0",
-            "contribution_count": len(contributions),
+            "export_version": "v1",
+            "generated_at": timezone.now().isoformat(),
+            "user": {
+                "user_id": str(user.id) if user else None,
+                "created_at": user.date_joined.isoformat() if user else None,
+            },
             "contributions": contribution_serializer.data,
         }

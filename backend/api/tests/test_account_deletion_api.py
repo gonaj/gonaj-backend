@@ -109,9 +109,9 @@ class AccountDeletionNamespaceTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_export_uses_canonical_path(self):
-        """Verify /api/me/contributions/export is the canonical path."""
+        """Verify /api/v1/me/contributions/export is the canonical path (v1)."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
         # The canonical path should work
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get("/api/v1/me/contributions/export")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
