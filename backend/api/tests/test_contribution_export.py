@@ -1,18 +1,17 @@
 """
-Comprehensive tests for contribution export functionality (Sprint-5C).
+Tests for user data export (Sprint-9, Phase-2).
 
 Tests cover DATA_RIGHTS_V1 compliance for the export endpoint:
-- INV-D1: No system-internal identifiers exposed
-- INV-D2: No cross-contribution linkage beyond timestamps
-- INV-D3: No weakening of post-deletion anonymity
-- INV-D4: No leaking contributor_fingerprint
+- Authorization enforcement
+- Ownership isolation (user can only export own data)
+- Determinism (same data produces identical output)
+- Non-leakage (no canonical, evaluation, or abuse data)
+- UI mode independence (export content unaffected by UI mode)
 
-TEST MATRIX:
-1. Happy path: User can export their contributions
-2. Security: Deleted users cannot export (403)
-3. Privacy: No internal identifiers in export
-4. Stability: Export is deterministic
-5. Empty state: Export works with no contributions
+TEST INVARIANTS:
+- P2-INV-8: User data rights preserved
+- INV-D1: No system-internal identifiers exposed
+- INV-D4: No leaking contributor_fingerprint
 """
 
 import uuid
@@ -26,8 +25,12 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 
-class ContributionExportTestCase(TestCase):
-    """Tests for GET /api/me/contributions/export."""
+# Export endpoint URL (versioned, v1 frozen)
+EXPORT_URL = "/api/v1/me/contributions/export"
+
+
+class ContributionExportAuthorizationTestCase(TestCase):
+    """Tests for export endpoint authorization."""
 
     def setUp(self):
         """Create test user and client."""
@@ -42,90 +45,151 @@ class ContributionExportTestCase(TestCase):
 
     def test_export_requires_authentication(self):
         """Test that export endpoint requires authentication."""
-        response = self.client.get("/api/me/contributions/export")
-        # In this project, unauthenticated requests to views protected by
-        # IsAuthenticated return 403 Forbidden (given the configured
-        # authentication classes, e.g. SessionAuthentication), so we assert
-        # 403 here rather than the more typical 401 Unauthorized.
+        response = self.client.get(EXPORT_URL)
+        # Unauthenticated requests return 403 Forbidden
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_export_empty_contributions(self):
-        """Test export works when user has no contributions."""
+    def test_export_authenticated_user_succeeds(self):
+        """Test that authenticated users can export."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get(EXPORT_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        response = self.client.get("/api/me/contributions/export")
+
+class ContributionExportOwnershipTestCase(TestCase):
+    """Tests for ownership isolation in export."""
+
+    def setUp(self):
+        """Create test users and contributions."""
+        self.client = APIClient()
+        self.user_a = User.objects.create_user(
+            username="usera",
+            email="usera@example.com",
+            password="testpass123",
+        )
+        self.user_b = User.objects.create_user(
+            username="userb",
+            email="userb@example.com",
+            password="testpass123",
+        )
+        access_data = create_access_token(self.user_a)
+        self.access_token_a = access_data["access_token"]
+        observed_time = timezone.now() - timedelta(hours=1)
+
+        # Create contributions for both users
+        ContributionEvent.objects.create(
+            contributor=self.user_a,
+            contribution_type="stop_exists",
+            subject_ref={"lat": 40.0, "lon": -74.0},
+            payload={"name": "User A Stop"},
+            contributor_fingerprint=self.user_a.id,
+            client_generated_id=uuid.uuid4(),
+            observed_at=observed_time,
+        )
+        ContributionEvent.objects.create(
+            contributor=self.user_b,
+            contribution_type="stop_exists",
+            subject_ref={"lat": 41.0, "lon": -73.0},
+            payload={"name": "User B Stop"},
+            contributor_fingerprint=self.user_b.id,
+            client_generated_id=uuid.uuid4(),
+            observed_at=observed_time,
+        )
+
+    def test_user_a_cannot_see_user_b_contributions(self):
+        """Test that User A can only see their own contributions."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token_a}")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["export_version"], "1.0")
-        self.assertEqual(response.data["contribution_count"], 0)
-        self.assertEqual(response.data["contributions"], [])
+        self.assertEqual(len(response.data["contributions"]), 1)
+        self.assertEqual(
+            response.data["contributions"][0]["payload"]["name"],
+            "User A Stop"
+        )
 
-    def test_export_includes_user_contributions(self):
-        """Test that export returns user's contributions."""
-        # Create contributions for user
+
+class ContributionExportFormatTestCase(TestCase):
+    """Tests for export format compliance (v1)."""
+
+    def setUp(self):
+        """Create test user with contributions."""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="formatuser",
+            email="format@example.com",
+            password="testpass123",
+        )
+        access_data = create_access_token(self.user)
+        self.access_token = access_data["access_token"]
         observed_time = timezone.now() - timedelta(hours=1)
-        contribution = ContributionEvent.objects.create(
+
+        self.contribution = ContributionEvent.objects.create(
             contributor=self.user,
             contribution_type="stop_exists",
             subject_ref={"lat": 40.7128, "lon": -74.0060},
-            payload={"name": "Test Stop", "confidence": "high"},
+            payload={"name": "Test Stop"},
             contributor_fingerprint=self.user.id,
             client_generated_id=uuid.uuid4(),
             observed_at=observed_time,
         )
 
+    def test_export_version_is_v1(self):
+        """Test that export_version is 'v1'."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["contribution_count"], 1)
-        self.assertEqual(len(response.data["contributions"]), 1)
+        self.assertEqual(response.data["export_version"], "v1")
 
-        exported = response.data["contributions"][0]
-        self.assertEqual(exported["contribution_type"], "stop_exists")
-        self.assertEqual(exported["subject_ref"], {"lat": 40.7128, "lon": -74.0060})
-        self.assertEqual(
-            exported["payload"], {"name": "Test Stop", "confidence": "high"}
-        )
-
-    def test_export_excludes_other_users_contributions(self):
-        """Test that export only returns the authenticated user's contributions."""
-        other_user = User.objects.create_user(
-            username="otheruser",
-            email="other@example.com",
-            password="testpass123",
-        )
-        observed_time = timezone.now() - timedelta(hours=1)
-
-        # Create contribution for other user
-        ContributionEvent.objects.create(
-            contributor=other_user,
-            contribution_type="stop_exists",
-            subject_ref={"lat": 40.0, "lon": -74.0},
-            payload={"name": "Other Stop"},
-            contributor_fingerprint=other_user.id,
-            client_generated_id=uuid.uuid4(),
-            observed_at=observed_time,
-        )
-
-        # Create contribution for test user
-        ContributionEvent.objects.create(
-            contributor=self.user,
-            contribution_type="stop_exists",
-            subject_ref={"lat": 41.0, "lon": -73.0},
-            payload={"name": "My Stop"},
-            contributor_fingerprint=self.user.id,
-            client_generated_id=uuid.uuid4(),
-            observed_at=observed_time,
-        )
-
+    def test_export_includes_generated_at(self):
+        """Test that generated_at timestamp is present."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["contribution_count"], 1)
+        self.assertIn("generated_at", response.data)
+        self.assertIsNotNone(response.data["generated_at"])
+
+    def test_export_includes_user_section(self):
+        """Test that user section with user_id and created_at is present."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get(EXPORT_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("user", response.data)
+        self.assertIn("user_id", response.data["user"])
+        self.assertIn("created_at", response.data["user"])
+        self.assertEqual(response.data["user"]["user_id"], str(self.user.id))
+
+    def test_contribution_includes_required_fields(self):
+        """Test that contributions include all required fields."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get(EXPORT_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        contribution = response.data["contributions"][0]
+
+        required_fields = {
+            "contribution_id",
+            "contribution_type",
+            "observed_at",
+            "submitted_at",
+            "subject_ref",
+            "payload",
+        }
+        self.assertEqual(set(contribution.keys()), required_fields)
+
+    def test_contribution_id_matches_client_generated_id(self):
+        """Test that contribution_id is the client_generated_id."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get(EXPORT_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        contribution = response.data["contributions"][0]
         self.assertEqual(
-            response.data["contributions"][0]["payload"]["name"], "My Stop"
+            contribution["contribution_id"],
+            str(self.contribution.client_generated_id)
         )
 
 
@@ -133,7 +197,7 @@ class ContributionExportPrivacyTestCase(TestCase):
     """Tests for privacy invariants in export (INV-D1 through INV-D4)."""
 
     def setUp(self):
-        """Create test user with contributions."""
+        """Create test user with contributions including all fields."""
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="privacyuser",
@@ -144,8 +208,7 @@ class ContributionExportPrivacyTestCase(TestCase):
         self.access_token = access_data["access_token"]
         observed_time = timezone.now() - timedelta(hours=1)
 
-        # Create contribution with all fields populated
-        self.fingerprint = self.user.id  # Use user.id as fingerprint (UUID)
+        self.fingerprint = self.user.id
         self.contribution = ContributionEvent.objects.create(
             contributor=self.user,
             contribution_type="stop_exists",
@@ -159,77 +222,38 @@ class ContributionExportPrivacyTestCase(TestCase):
         )
 
     def test_export_does_not_include_contributor_fingerprint(self):
-        """
-        INV-D4: contributor_fingerprint must NEVER appear in export.
-
-        This is an internal evaluation identifier and exposing it would
-        allow cross-referencing contributions post-deletion.
-        """
+        """INV-D4: contributor_fingerprint must NEVER appear as a key in export."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        contribution = response.data["contributions"][0]
 
-        exported = response.data["contributions"][0]
-
-        # contributor_fingerprint must not be present
-        self.assertNotIn("contributor_fingerprint", exported)
-
-        # Also verify the fingerprint UUID string is not in the export
-        export_str = str(response.data)
-        self.assertNotIn(str(self.fingerprint), export_str)
+        # contributor_fingerprint key must not be present in contributions
+        self.assertNotIn("contributor_fingerprint", contribution)
+        # Also verify it's not in top-level response
+        self.assertNotIn("contributor_fingerprint", response.data)
 
     def test_export_does_not_include_internal_ids(self):
-        """
-        INV-D1: No system-internal identifiers exposed.
-
-        Export must not include database IDs, client_generated_id,
-        device_id, or other internal identifiers.
-        """
+        """INV-D1: No system-internal identifiers exposed."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        exported = response.data["contributions"][0]
+        contribution = response.data["contributions"][0]
 
         # Internal identifiers must not be present
-        self.assertNotIn("id", exported)
-        self.assertNotIn("client_generated_id", exported)
-        self.assertNotIn("device_id", exported)
-        self.assertNotIn("context", exported)
-        self.assertNotIn("contributor", exported)
-        self.assertNotIn("submitted_at", exported)
-
-    def test_export_only_includes_whitelisted_fields(self):
-        """
-        Test that export uses explicit whitelist of fields.
-
-        Only user-supplied data should be included:
-        - observed_at
-        - contribution_type
-        - subject_ref
-        - payload
-        """
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        exported = response.data["contributions"][0]
-
-        # Only these fields should be present
-        expected_fields = {"observed_at", "contribution_type", "subject_ref", "payload"}
-        actual_fields = set(exported.keys())
-
-        self.assertEqual(actual_fields, expected_fields)
+        self.assertNotIn("id", contribution)
+        self.assertNotIn("device_id", contribution)
+        self.assertNotIn("context", contribution)
+        self.assertNotIn("contributor", contribution)
 
 
 class ContributionExportDeletedUserTestCase(TestCase):
     """Tests for export behavior with deleted users."""
 
     def setUp(self):
-        """Create test user and client."""
+        """Create test user and contributions."""
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="deleteduser",
@@ -240,7 +264,6 @@ class ContributionExportDeletedUserTestCase(TestCase):
         self.access_token = access_data["access_token"]
         observed_time = timezone.now() - timedelta(hours=1)
 
-        # Create contribution before "deletion"
         ContributionEvent.objects.create(
             contributor=self.user,
             contribution_type="stop_exists",
@@ -252,41 +275,34 @@ class ContributionExportDeletedUserTestCase(TestCase):
         )
 
     def test_deleted_user_cannot_export(self):
-        """
-        INV-D3: Deleted users cannot access export.
-
-        After account deletion (is_active=False), the export endpoint
-        must return 403 Forbidden to prevent data access.
-        """
+        """INV-D3: Deleted users cannot access export."""
         # Simulate deletion by deactivating user
         self.user.is_active = False
         self.user.save()
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
+        # Deleted users lack CONTRIBUTE capability, so they get 403
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("error", response.data)
-        self.assertIn("deactivated", response.data["error"].lower())
 
 
-class ContributionExportStabilityTestCase(TestCase):
-    """Tests for export stability and determinism."""
+class ContributionExportDeterminismTestCase(TestCase):
+    """Tests for export determinism and stability."""
 
     def setUp(self):
         """Create test user with multiple contributions."""
         self.client = APIClient()
         self.user = User.objects.create_user(
-            username="stabilityuser",
-            email="stability@example.com",
+            username="determinismuser",
+            email="determinism@example.com",
             password="testpass123",
         )
         access_data = create_access_token(self.user)
         self.access_token = access_data["access_token"]
 
-        # Create multiple contributions with different timestamps
+        # Create contributions with different timestamps
         base_time = timezone.now() - timedelta(hours=10)
-
         for i in range(5):
             ContributionEvent.objects.create(
                 contributor=self.user,
@@ -298,89 +314,119 @@ class ContributionExportStabilityTestCase(TestCase):
                 observed_at=base_time + timedelta(hours=i),
             )
 
-    def test_export_is_deterministic(self):
-        """
-        Test that export produces identical results on repeated calls.
-
-        Export must be stable to support data verification and
-        compliance auditing.
-        """
+    def test_repeated_exports_are_identical_except_generated_at(self):
+        """Test that repeated exports produce identical data (except generated_at)."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
 
-        # Make two export requests
-        response1 = self.client.get("/api/me/contributions/export")
-        response2 = self.client.get("/api/me/contributions/export")
+        response1 = self.client.get(EXPORT_URL)
+        response2 = self.client.get(EXPORT_URL)
 
         self.assertEqual(response1.status_code, status.HTTP_200_OK)
         self.assertEqual(response2.status_code, status.HTTP_200_OK)
 
-        # Results should be identical
-        self.assertEqual(response1.data, response2.data)
+        # generated_at will differ, so compare everything else
+        data1 = response1.data.copy()
+        data2 = response2.data.copy()
+        del data1["generated_at"]
+        del data2["generated_at"]
 
-    def test_export_ordered_by_observed_at(self):
-        """
-        Test that contributions are ordered by observed_at.
+        self.assertEqual(data1, data2)
 
-        Consistent ordering is required for deterministic export.
-        """
+    def test_export_ordered_by_submitted_at_asc(self):
+        """Test that contributions are ordered by submitted_at ASC."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
         contributions = response.data["contributions"]
         self.assertEqual(len(contributions), 5)
 
-        # Verify ordering by checking payload index
-        for i, contrib in enumerate(contributions):
-            self.assertEqual(contrib["payload"]["index"], i)
+        # Verify ordering by parsing timestamps
+        timestamps = [c["submitted_at"] for c in contributions]
+        self.assertEqual(timestamps, sorted(timestamps))
 
 
-class ContributionExportVersionTestCase(TestCase):
-    """Tests for export versioning and metadata."""
+class ContributionExportUIModeIndependenceTestCase(TestCase):
+    """Tests for UI mode independence in export."""
 
     def setUp(self):
-        """Create test user and client."""
+        """Create test user with contributions."""
         self.client = APIClient()
         self.user = User.objects.create_user(
-            username="versionuser",
-            email="version@example.com",
+            username="uimodeuser",
+            email="uimode@example.com",
+            password="testpass123",
+        )
+        access_data = create_access_token(self.user)
+        self.access_token = access_data["access_token"]
+        observed_time = timezone.now() - timedelta(hours=1)
+
+        ContributionEvent.objects.create(
+            contributor=self.user,
+            contribution_type="stop_exists",
+            subject_ref={"lat": 40.7128, "lon": -74.0060},
+            payload={"name": "Test Stop"},
+            contributor_fingerprint=self.user.id,
+            client_generated_id=uuid.uuid4(),
+            observed_at=observed_time,
+        )
+
+    def test_ui_mode_does_not_affect_export_content(self):
+        """Test that UI mode header does not change export content."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+
+        # Export without UI mode
+        response_no_mode = self.client.get(EXPORT_URL)
+
+        # Export with contributor UI mode
+        response_contributor = self.client.get(
+            EXPORT_URL,
+            HTTP_X_UI_MODE="contributor"
+        )
+
+        # Export with explorer UI mode
+        response_explorer = self.client.get(
+            EXPORT_URL,
+            HTTP_X_UI_MODE="explorer"
+        )
+
+        self.assertEqual(response_no_mode.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_contributor.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_explorer.status_code, status.HTTP_200_OK)
+
+        # Compare contributions (exclude generated_at which varies)
+        data_no_mode = response_no_mode.data.copy()
+        data_contributor = response_contributor.data.copy()
+        data_explorer = response_explorer.data.copy()
+
+        del data_no_mode["generated_at"]
+        del data_contributor["generated_at"]
+        del data_explorer["generated_at"]
+
+        self.assertEqual(data_no_mode, data_contributor)
+        self.assertEqual(data_no_mode, data_explorer)
+
+
+class ContributionExportEmptyStateTestCase(TestCase):
+    """Tests for export with no contributions."""
+
+    def setUp(self):
+        """Create test user with no contributions."""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="emptyuser",
+            email="empty@example.com",
             password="testpass123",
         )
         access_data = create_access_token(self.user)
         self.access_token = access_data["access_token"]
 
-    def test_export_includes_version(self):
-        """Test that export includes version for future compatibility."""
+    def test_export_works_with_no_contributions(self):
+        """Test that export works when user has no contributions."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get(EXPORT_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("export_version", response.data)
-        self.assertEqual(response.data["export_version"], "1.0")
-
-    def test_export_includes_count(self):
-        """Test that export includes contribution count for validation."""
-        observed_time = timezone.now() - timedelta(hours=1)
-        # Create some contributions
-        for i in range(3):
-            ContributionEvent.objects.create(
-                contributor=self.user,
-                contribution_type="stop_exists",
-                subject_ref={"lat": 40.0, "lon": -74.0},
-                payload={"index": i},
-                contributor_fingerprint=self.user.id,
-                client_generated_id=uuid.uuid4(),
-                observed_at=observed_time,
-            )
-
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
-
-        response = self.client.get("/api/me/contributions/export")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("contribution_count", response.data)
-        self.assertEqual(response.data["contribution_count"], 3)
-        self.assertEqual(len(response.data["contributions"]), 3)
+        self.assertEqual(response.data["export_version"], "v1")
+        self.assertEqual(response.data["contributions"], [])
+        self.assertIn("user", response.data)

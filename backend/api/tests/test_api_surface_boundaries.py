@@ -70,7 +70,7 @@ class AnonymousMutationTests(TestCase):
 
     def test_anonymous_cannot_access_contribution_export(self):
         """Anonymous users cannot export contributions."""
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get("/api/v1/me/contributions/export")
         
         self.assertIn(
             response.status_code,
@@ -190,7 +190,7 @@ class HttpMethodRestrictionTests(TestCase):
 
     def test_contribution_export_endpoint_only_allows_get(self):
         """Contribution export endpoint should only accept GET."""
-        url = "/api/me/contributions/export"
+        url = "/api/v1/me/contributions/export"
         
         # POST should be rejected
         response = self.client.post(url, {}, format="json")
@@ -343,15 +343,15 @@ class ReadOnlyEndpointTests(TestCase):
             )
 
     def test_contribution_export_is_read_only(self):
-        """GET /api/me/contributions/export should be read-only."""
-        url = "/api/me/contributions/export"
+        """GET /api/v1/me/contributions/export should be read-only."""
+        url = "/api/v1/me/contributions/export"
         
         # GET should work (even if empty)
         response = self.client.get(url)
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
-            "GET on /api/me/contributions/export should succeed"
+            "GET on /api/v1/me/contributions/export should succeed"
         )
         
         # POST/PUT/PATCH/DELETE should be rejected
@@ -412,7 +412,7 @@ class PermissionBoundaryTests(TestCase):
         """Authenticated users can export their own contributions."""
         self.client.force_authenticate(user=self.user1)
         
-        response = self.client.get("/api/me/contributions/export")
+        response = self.client.get("/api/v1/me/contributions/export")
         
         # Should succeed (even if empty)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
