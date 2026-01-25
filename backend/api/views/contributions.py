@@ -20,6 +20,7 @@ API BOUNDARY (Phase-2 Sprint-1):
 - No anonymous mutation
 """
 
+from api.abuse_signals import record_contribution_signals
 from api.authz import require_capability
 from api.capabilities import Capability
 from api.idempotency import IdempotencyMixin
@@ -132,6 +133,12 @@ class ContributionSubmissionView(IdempotencyMixin, APIView):
 
         # Create the event (idempotent via client_generated_id)
         event = serializer.create(validated_data)
+
+        # Record abuse signals (observational only, non-blocking)
+        # Uses the existing de-identified contributor_fingerprint
+        record_contribution_signals(
+            request, validated_data, event.contributor_fingerprint
+        )
 
         # Return appropriate status code
         # 201 Created for new events, 200 OK for idempotent retries
