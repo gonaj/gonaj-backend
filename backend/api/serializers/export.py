@@ -134,9 +134,10 @@ class ContributionExportListSerializer(serializers.Serializer):
     - user: Informational section (user_id, created_at)
     - contributions: List of contribution records
 
-    NOTE: The user section remains valid after account deletion.
-    It contains only the user_id and account creation date, which
-    are preserved for GDPR compliance even after identity removal.
+    NOTE: The export endpoint is only accessible to users with the
+    required capabilities (i.e., not deleted users). The user section
+    contains minimal metadata (user_id and account creation date),
+    which may be retained for compliance purposes in the data model.
     """
 
     def to_representation(self, data):
