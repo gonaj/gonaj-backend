@@ -135,6 +135,12 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    # Phase-2 Sprint-7: Rate Limiting Configuration
+    # Note: Throttles are applied per-view, not globally
+    "DEFAULT_THROTTLE_RATES": {
+        "anon_read": "100/minute",   # IP-based for public reads
+        "user_write": "30/minute",   # User-based for mutations
+    },
 }
 
 # ============================================================================
