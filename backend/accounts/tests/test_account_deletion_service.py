@@ -549,7 +549,6 @@ class DeletionResultTests(TestCase):
             tokens_revoked=5,
         )
 
-
         with self.assertRaises(Exception):  # FrozenInstanceError
             result.success = False
 
@@ -567,7 +566,7 @@ class AbuseSignalContinuityTests(TestCase):
         
         Even though the user is deleted, their fingerprint remains on evidence/signals.
         """
-        from api.abuse_signals import _collector, VELOCITY_FINGERPRINT_PREFIX
+        from api.abuse_signals import VELOCITY_FINGERPRINT_PREFIX
         from django.core.cache import cache
 
         # Generate a fingerprint (uuid)

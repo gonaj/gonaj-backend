@@ -148,7 +148,7 @@ Expose a safe, authorized deletion endpoint.
 
 **Requirements**
 
-- Endpoint: `DELETE /api/v1/me`
+- Endpoint: `DELETE /api/me`
 - Must require explicit capability (`Capability.CONTRIBUTE`)
 - Must be idempotent
 - Must not depend on UI mode
@@ -181,7 +181,7 @@ This sprint **MUST follow TDD**.
 
 **Files**
 
-- `[NEW] backend/accounts/tests/test_account_deletion.py`
+- `[MODIFY] backend/accounts/tests/test_account_deletion_service.py`
 - `[MODIFY] backend/api/tests/test_account_deletion_api.py`
 
 **Tests Required**
