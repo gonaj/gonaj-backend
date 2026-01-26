@@ -551,3 +551,133 @@ class DeletionResultTests(TestCase):
 
         with self.assertRaises(Exception):  # FrozenInstanceError
             result.success = False
+
+
+class AbuseSignalContinuityTests(TestCase):
+    """Tests ensures abuse signals persist after account deletion."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="abuser", email="abuse@test.com")
+        self.service = AccountDeletionService()
+
+    def test_abuse_signals_continue_after_account_deletion(self):
+        """
+        Test that abuse signals (velocity/fingerprint) remain valid after deletion.
+        
+        Even though the user is deleted, their fingerprint remains on evidence/signals.
+        """
+        from api.abuse_signals import VELOCITY_FINGERPRINT_PREFIX
+        from django.core.cache import cache
+
+        # Generate a fingerprint (uuid)
+        fingerprint = uuid.uuid4()
+        
+        # Simulate recording a signal (fingerprint velocity)
+        # We manually trigger the collector's internal logic or cache set
+        cache_key = f"{VELOCITY_FINGERPRINT_PREFIX}{fingerprint}"
+        cache.set(cache_key, 5, 300)
+        
+        # Verify it's there
+        self.assertEqual(cache.get(cache_key), 5)
+
+        # Delete account
+        self.service.delete_account(self.user)
+
+        # Verify signal persists (cache is independent of user model)
+        self.assertEqual(cache.get(cache_key), 5)
+        
+    def test_fingerprint_based_metrics_unaffected_by_deletion(self):
+        """
+        Test that metrics tied to fingerprint are not removed.
+        """
+        # Similar to above, but conceptually distinct for "metrics"
+        # Since we don't have a separate metrics system, we test the logic principle
+        fingerprint = uuid.uuid4()
+        
+        # Create an event with this fingerprint
+        ContributionEvent.objects.create(
+            client_generated_id=uuid.uuid4(),
+            contributor=self.user,
+            contributor_fingerprint=fingerprint,
+            contribution_type="stop_exists",
+            subject_ref={},
+            payload={},
+            observed_at=timezone.now(),
+        )
+
+        # Delete user
+        self.service.delete_account(self.user)
+
+        # Verify event still has fingerprint
+        event = ContributionEvent.objects.first()
+        self.assertEqual(event.contributor_fingerprint, fingerprint)
+        # This confirms any metric derived from fingerprint aggregation remains stable
+
+
+class OrderingPreservationTests(TestCase):
+    """Tests for ordering stability and reproducibility."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="order", email="order@test.com")
+        self.service = AccountDeletionService()
+
+    def test_canonical_read_ordering_unchanged_after_account_deletion(self):
+        """
+        Test that canonical entity queries return results in same order.
+        """
+        from transit.models import Stop
+        
+        # Create Stops with deterministic order
+        stops = []
+        for i in range(3):
+            s = Stop(
+                public_id=f"stop-{i}",
+                name=f"Stop {i}", 
+                location=Point(0,0),
+                belief_state=Stop.BeliefState.ACTIVE_HIGH
+            )
+            s._internal_save()  # Use internal save for canonical entities
+            stops.append(s)
+            
+        # Verify initial order
+        initial_ids = list(Stop.objects.order_by('public_id').values_list('id', flat=True))
+        
+        # Delete user (who might have contributed to them, theoretically)
+        self.service.delete_account(self.user)
+        
+        # Verify order is identical
+        final_ids = list(Stop.objects.order_by('public_id').values_list('id', flat=True))
+        self.assertEqual(initial_ids, final_ids)
+
+    def test_export_ordering_unchanged_after_account_deletion(self):
+        """
+        Test that underlying evidence ordering is preserved.
+        
+        Although export API is forbidden, the data itself must remain ordered
+        for any system-level replay or audit export.
+        """
+        # Create events at different times
+        base_time = timezone.now()
+        events = []
+        for i in range(3):
+            e = ContributionEvent.objects.create(
+                client_generated_id=uuid.uuid4(),
+                contributor=self.user,
+                contributor_fingerprint=self.user.id,
+                contribution_type="stop_exists",
+                subject_ref={},
+                payload={},
+                observed_at=base_time + timedelta(minutes=i)
+            )
+            events.append(e)
+            
+        # Verify order by observed_at
+        initial_ids = list(ContributionEvent.objects.filter(id__in=[e.id for e in events])
+                           .order_by('observed_at').values_list('id', flat=True))
+                           
+        self.service.delete_account(self.user)
+        
+        # Verify order is preserved
+        final_ids = list(ContributionEvent.objects.filter(id__in=[e.id for e in events])
+                         .order_by('observed_at').values_list('id', flat=True))
+        self.assertEqual(initial_ids, final_ids)
