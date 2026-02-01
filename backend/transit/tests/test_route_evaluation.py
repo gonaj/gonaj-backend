@@ -28,11 +28,10 @@ EXPLICITLY FORBIDDEN (Sprint-11):
 SCHEMA INVARIANTS (Sprint-11 Section 5):
 - Route model MUST NOT have belief_state field
 - Route model MUST NOT have BeliefState enum
-- Binary canonical truth only (is_canonical boolean field)
+- Binary canonical truth via RouteCanonicalDecision.is_canonical attribute
 """
 
-import copy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -44,12 +43,8 @@ from django.utils import timezone
 
 from transit.evaluation import (
     EvaluationContext,
-    RouteAggregationResult,
-    RouteCanonicalDecision,
-    RouteEvaluationResult,
     RouteEvaluator,
     RouteEvidenceAggregator,
-    RouteEvidenceCluster,
     check_route_stop_dependency,
     evaluate_route_canonical_status,
 )
@@ -160,6 +155,9 @@ class RouteEvaluationTestBase(TestCase):
         """
         Helper to create a canonical Stop for testing.
 
+        A Stop is canonical if it exists in the DB and is currently valid
+        (valid_until is NULL). Confidence is not a canonical status threshold.
+
         Uses _internal_save to bypass the guardrail.
         """
         stop = Stop(
@@ -168,7 +166,7 @@ class RouteEvaluationTestBase(TestCase):
             location=Point(-74.0, 40.7, srid=4326),
             structural_confidence=Decimal(str(confidence)),
             freshness_confidence=Decimal(str(confidence)),
-            valid_until=None,  # Currently valid
+            valid_until=None,  # Currently valid = canonical
         )
         stop._internal_save()
         return stop
@@ -177,15 +175,16 @@ class RouteEvaluationTestBase(TestCase):
         """
         Helper to create a non-canonical Stop for testing.
 
-        Low confidence makes it non-canonical.
+        A Stop is non-canonical if it doesn't exist OR is no longer valid
+        (has valid_until set). This simulates a retired/superseded Stop.
         """
         stop = Stop(
             public_id=f"stop_{uuid4().hex[:8]}",
             name=name,
             location=Point(-74.0, 40.7, srid=4326),
-            structural_confidence=Decimal("0.2"),  # Below canonical threshold
-            freshness_confidence=Decimal("0.2"),
-            valid_until=None,
+            structural_confidence=Decimal("0.8"),
+            freshness_confidence=Decimal("0.8"),
+            valid_until=datetime(2000, 1, 1, tzinfo=dt_timezone.utc),  # Fixed past date = non-canonical
         )
         stop._internal_save()
         return stop
@@ -419,7 +418,7 @@ class NoStopMutationInvariantTests(RouteEvaluationTestBase):
 
         # Run Route evaluation
         evaluator = RouteEvaluator(self.context)
-        result = evaluator.evaluate_routes(events)
+        _result = evaluator.evaluate_routes(events)  # Result unused; testing side effects
 
         # Verify stops are unchanged
         stop1.refresh_from_db()
@@ -476,7 +475,7 @@ class NoStopMutationInvariantTests(RouteEvaluationTestBase):
         ]
 
         # Run evaluation (should NOT make route canonical due to stop)
-        result = evaluate_route_canonical_status(events, self.context)
+        _result = evaluate_route_canonical_status(events, self.context)  # Result unused; testing side effects
 
         # Verify stop is unchanged
         non_canonical_stop.refresh_from_db()
@@ -644,6 +643,64 @@ class CanonicalDependencyInvariantTests(RouteEvaluationTestBase):
         # Empty stops (vacuously true)
         self.assertTrue(check_route_stop_dependency(frozenset(), {}))
 
+    def test_low_confidence_stop_is_still_canonical(self):
+        """
+        Stop canonical status is determined by existence + validity, NOT confidence.
+
+        A Stop with very low structural_confidence (e.g., 0.1) but valid_until=NULL
+        MUST be treated as canonical. Confidence is a creation gate, not a
+        canonical status threshold. The canonical read API (canonical.py) exposes
+        all Stops with valid_until=NULL without confidence filtering.
+
+        This test permanently locks the Stop canonical definition used by
+        Route dependency checks.
+        """
+        # Create a Stop with minimal confidence but currently valid
+        low_confidence_stop = Stop(
+            public_id=f"stop_{uuid4().hex[:8]}",
+            name="Low Confidence Stop",
+            location=Point(-74.0, 40.7, srid=4326),
+            structural_confidence=Decimal("0.1"),
+            freshness_confidence=Decimal("0.1"),
+            valid_until=None,  # Currently valid = canonical regardless of confidence
+        )
+        low_confidence_stop._internal_save()
+
+        # Create route evidence referencing only this low-confidence stop
+        now = self.evaluation_time
+        events = [
+            self.create_route_exists_event(
+                self.user1,
+                observed_at=now - timedelta(days=3),
+                stop_ids=[low_confidence_stop.id],
+            ),
+            self.create_route_exists_event(
+                self.user2,
+                observed_at=now - timedelta(days=2),
+                stop_ids=[low_confidence_stop.id],
+            ),
+            self.create_route_traversal_event(
+                self.user3,
+                observed_at=now - timedelta(days=1),
+                traversal_stops=[{"stop_id": str(low_confidence_stop.id)}],
+            ),
+        ]
+
+        result = evaluate_route_canonical_status(events, self.context)
+
+        self.assertEqual(len(result.decisions), 1)
+        decision = result.decisions[0]
+
+        # The low-confidence Stop MUST NOT block Route canonical status
+        self.assertTrue(
+            decision.all_stops_canonical,
+            "Stop with valid_until=NULL must be canonical regardless of confidence value",
+        )
+        self.assertTrue(
+            decision.is_canonical,
+            "Route must be canonical when all referenced Stops exist and are currently valid",
+        )
+
 
 # =============================================================================
 # Invariant 5: No Side Effects Tests
@@ -679,7 +736,7 @@ class NoSideEffectsInvariantTests(RouteEvaluationTestBase):
         ]
 
         # Run evaluation
-        result = evaluate_route_canonical_status(events, self.context)
+        _result = evaluate_route_canonical_status(events, self.context)  # Result unused; testing side effects
 
         # No Routes should be created
         final_route_count = Route.objects.count()
@@ -699,7 +756,7 @@ class NoSideEffectsInvariantTests(RouteEvaluationTestBase):
         ]
 
         aggregator = RouteEvidenceAggregator()
-        result = aggregator.aggregate(events, self.evaluation_time)
+        _result = aggregator.aggregate(events, self.evaluation_time)  # Result unused; testing side effects
 
         # No database changes
         self.assertEqual(Stop.objects.count(), initial_stop_count)
@@ -727,7 +784,7 @@ class NoSideEffectsInvariantTests(RouteEvaluationTestBase):
 
         # Run evaluation
         evaluator = RouteEvaluator(self.context)
-        result = evaluator.evaluate_routes(events)
+        _result = evaluator.evaluate_routes(events)  # Result unused; testing side effects
 
         # Count all objects after - must be unchanged
         self.assertEqual(Stop.objects.count(), stop_count_before)

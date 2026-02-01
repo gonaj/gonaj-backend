@@ -49,7 +49,7 @@ from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 from core.models import ContributionEvent
-from transit.models import Route, Stop
+from transit.models import Stop
 
 from .base import BaseEvaluator, EvaluationContext, EvaluationResult
 from .route_aggregation import (
@@ -191,9 +191,6 @@ class RouteEvaluator(BaseEvaluator):
     MIN_INDEPENDENT_CONTRIBUTORS = 2
     MIN_DISTINCT_DAYS = 2
     MIN_EVIDENCE_COUNT = 3
-    
-    # Stop canonical threshold (for dependency checks)
-    STOP_CANONICAL_CONFIDENCE_THRESHOLD = 0.5  # Decimal("0.5") minimum for Stop canonical status
 
     def __init__(self, context: EvaluationContext):
         """
@@ -407,8 +404,11 @@ class RouteEvaluator(BaseEvaluator):
 
         A Stop is considered canonical if:
         - It exists in the database
-        - Its structural_confidence is above threshold (>= 0.5 for v0)
         - It is currently valid (valid_until is NULL)
+
+        Note: structural_confidence is a creation gate, not a canonical threshold.
+        Once a Stop exists and is currently valid, it is canonical. The canonical
+        read API (canonical.py) exposes all valid Stops without confidence filtering.
 
         Args:
             aggregation_result: The aggregation result containing stop references
@@ -425,11 +425,11 @@ class RouteEvaluator(BaseEvaluator):
             return {}
 
         # Query Stop canonical status (READ-ONLY)
-        # A Stop is canonical if it exists, is currently valid, and has sufficient confidence
+        # A Stop is canonical if it exists and is currently valid
+        # Confidence is a creation gate, not a canonical status threshold
         canonical_stops = Stop.objects.filter(
             id__in=all_stop_ids,
             valid_until__isnull=True,  # Currently valid
-            structural_confidence__gte=self.STOP_CANONICAL_CONFIDENCE_THRESHOLD,
         ).values_list("id", flat=True)
 
         canonical_stop_set = set(canonical_stops)

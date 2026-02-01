@@ -431,8 +431,11 @@ class RouteEvidenceAggregator:
         if "route_id" in subject_ref:
             return f"id:{subject_ref['route_id']}"
 
-        short_name = subject_ref.get("route_short_name", "").strip()
-        name = subject_ref.get("route_name", "").strip()
+        # Safe string extraction - handle non-string values
+        raw_short_name = subject_ref.get("route_short_name", "")
+        raw_name = subject_ref.get("route_name", "")
+        short_name = raw_short_name.strip() if isinstance(raw_short_name, str) else ""
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
 
         if short_name and name:
             return f"route:{short_name}:{name}"
@@ -596,11 +599,12 @@ class RouteEvidenceAggregator:
         payload = event.payload or {}
 
         # Direct stop_ids list
-        if "stop_ids" in payload:
+        if "stop_ids" in payload and isinstance(payload["stop_ids"], list):
             for stop_id in payload["stop_ids"]:
                 try:
                     stop_ids.add(UUID(str(stop_id)))
                 except (ValueError, TypeError):
+                    # Skip malformed stop IDs - may be non-UUID strings or wrong types
                     pass
 
         # Stops list with id field
@@ -610,6 +614,7 @@ class RouteEvidenceAggregator:
                     try:
                         stop_ids.add(UUID(str(stop["id"])))
                     except (ValueError, TypeError):
+                        # Skip malformed stop IDs in structured stop objects
                         pass
 
         # Traversal stops (from GPS trace evidence)
@@ -619,4 +624,5 @@ class RouteEvidenceAggregator:
                     try:
                         stop_ids.add(UUID(str(stop["stop_id"])))
                     except (ValueError, TypeError):
+                        # Skip malformed stop IDs in traversal evidence
                         pass
