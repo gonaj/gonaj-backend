@@ -65,7 +65,6 @@ class RateLimitingReadEndpointsTests(APITestCase):
             name='Test Route',
             short_name='T1',
             route_type=Route.RouteType.BUS,
-            belief_state=Route.BeliefState.ACTIVE_HIGH,
         )
         self.route._internal_save()
         

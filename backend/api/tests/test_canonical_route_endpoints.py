@@ -52,7 +52,6 @@ class RouteListEndpointTests(TestCase):
             name="Downtown Express",
             short_name="42",
             route_type=Route.RouteType.BUS,
-            belief_state=Route.BeliefState.ACTIVE_HIGH,
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -64,7 +63,6 @@ class RouteListEndpointTests(TestCase):
             name="Red Line",
             short_name="Red",
             route_type=Route.RouteType.METRO,
-            belief_state=Route.BeliefState.ACTIVE_HIGH,
             structural_confidence=Decimal("0.95"),
             freshness_confidence=Decimal("0.9"),
             ruleset_version="v0",
@@ -76,7 +74,6 @@ class RouteListEndpointTests(TestCase):
             name="Airport Shuttle",
             short_name="AS",
             route_type=Route.RouteType.BUS,
-            belief_state=Route.BeliefState.ACTIVE_LOW,
             structural_confidence=Decimal("0.6"),
             freshness_confidence=Decimal("0.5"),
             ruleset_version="v0",
@@ -123,7 +120,6 @@ class RouteListEndpointTests(TestCase):
             self.assertIn('name', route)
             self.assertIn('short_name', route)
             self.assertIn('route_type', route)
-            self.assertIn('belief_state', route)
             
             # Blocked fields
             self.assertNotIn('id', route, "Internal UUID must not be exposed")
@@ -148,7 +144,6 @@ class RouteListEndpointTests(TestCase):
                 name=f"Test Route {i}",
                 short_name=str(i),
                 route_type=Route.RouteType.BUS,
-                belief_state="active_low",
                 structural_confidence=Decimal("0.5"),
                 freshness_confidence=Decimal("0.5"),
                 ruleset_version="v0",
@@ -250,7 +245,6 @@ class RouteDetailEndpointTests(TestCase):
             name="Test Route",
             short_name="T1",
             route_type=Route.RouteType.BUS,
-            belief_state=Route.BeliefState.ACTIVE_HIGH,
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -286,7 +280,6 @@ class RouteDetailEndpointTests(TestCase):
         self.assertIn('name', response.data)
         self.assertIn('short_name', response.data)
         self.assertIn('route_type', response.data)
-        self.assertIn('belief_state', response.data)
         
         # Blocked fields
         self.assertNotIn('id', response.data)
@@ -357,7 +350,6 @@ class RouteReadOnlyEnforcementTests(TestCase):
             name="Read Only Test",
             short_name="RO1",
             route_type=Route.RouteType.BUS,
-            belief_state=Route.BeliefState.ACTIVE_HIGH,
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -492,7 +484,6 @@ class RoutePublicIdDeterminismTests(TestCase):
             name="Public ID Test",
             short_name="PID",
             route_type=Route.RouteType.BUS,
-            belief_state="active_high",
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -512,7 +503,6 @@ class RoutePublicIdDeterminismTests(TestCase):
             name="Stability Test",
             short_name="ST",
             route_type=Route.RouteType.BUS,
-            belief_state="active_high",
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -535,7 +525,6 @@ class RoutePublicIdDeterminismTests(TestCase):
             name="UUID Independence Test",
             short_name="UI",
             route_type=Route.RouteType.BUS,
-            belief_state="active_high",
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
@@ -571,7 +560,6 @@ class RouteUIModePresentationTests(TestCase):
             name="UI Mode Test",
             short_name="UM",
             route_type=Route.RouteType.BUS,
-            belief_state="active_high",
             structural_confidence=Decimal("0.9"),
             freshness_confidence=Decimal("0.8"),
             ruleset_version="v0",
