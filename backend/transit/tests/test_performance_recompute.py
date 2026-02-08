@@ -25,11 +25,11 @@ Sprint-12 MUST NOT:
 - Add new public APIs
 """
 
-import hashlib
-from datetime import datetime, timedelta
+
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from core.models import ContributionEvent
@@ -37,7 +37,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
@@ -52,8 +51,9 @@ from transit.evaluation.jobs import (
     TargetType,
     Trigger,
 )
+from transit.evaluation.route_evaluator import RouteEvaluator
+from transit.evaluation.stop_evaluator import StopEvaluator
 from transit.evaluation.locking import (
-    _derive_lock_key,
     _NAMESPACE_ROUTE,
     _NAMESPACE_STOP,
     advisory_lock,
@@ -794,6 +794,8 @@ class RecomputeAllTests(TransactionTestCase):
         self.assertEqual(len(execution_order), 2)
         self.assertEqual(execution_order[0], TargetType.STOP)
         self.assertEqual(execution_order[1], TargetType.ROUTE)
+        self.assertTrue(result.all_successful)
+        self.assertEqual(result.total_jobs, 2)
 
     def test_recompute_all_aborts_routes_on_stop_failure(self):
         """If stop recompute fails, route recompute is NOT executed."""
@@ -1191,7 +1193,6 @@ class SprintSelfAuditTests(TestCase):
             "belief_state",
             "properties",
         }
-        actual_fields = {f.name for f in Stop._meta.get_fields() if hasattr(f, "name")}
         # Remove reverse relations and other non-concrete fields
         concrete_fields = {
             f.name for f in Stop._meta.get_fields() if hasattr(f, "column")
@@ -1412,3 +1413,285 @@ class DeterministicOrderingTests(TransactionTestCase):
         )
         result = self.executor._resolve_route_ids(job)
         self.assertEqual(result, sorted(result))
+
+
+# =============================================================================
+# Review-Comment Regression Tests
+# =============================================================================
+
+
+class LockContentionErrorSurfacingTests(TransactionTestCase):
+    """Tests that lock contention is surfaced as an error for admin triggers
+    but silently skipped for contribution triggers (#7)."""
+
+    def test_admin_stop_job_reports_error_on_lock_contention(self):
+        """Admin stop recompute reports failure when a lock is held."""
+        stop = Stop(
+            name="Locked Stop",
+            location=Point(-74.0, 40.7),
+            public_id=f"stop-{uuid4().hex[:8]}",
+        )
+        stop._internal_save()
+
+        # Mock try_advisory_lock to simulate contention (advisory locks are
+        # session-scoped so real contention can't be tested in-process).
+        executor = InlineExecutor()
+        job = EvaluationJob(
+            target_type=TargetType.STOP,
+            trigger=Trigger.ADMIN,
+            ruleset_version="1.0",
+            target_ids=frozenset([stop.id]),
+        )
+        with patch(
+            "transit.evaluation.executor.try_advisory_lock", return_value=False
+        ):
+            result = executor.execute(job)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.skipped_locked, 1)
+        self.assertTrue(
+            any("lock held" in e for e in result.errors),
+            f"Expected lock contention error, got: {result.errors}",
+        )
+
+    def test_contribution_stop_job_skips_silently_on_lock_contention(self):
+        """Contribution-triggered stop job skips locked entities without error."""
+        stop = Stop(
+            name="Locked Stop",
+            location=Point(-74.0, 40.7),
+            public_id=f"stop-{uuid4().hex[:8]}",
+        )
+        stop._internal_save()
+
+        executor = InlineExecutor()
+        job = EvaluationJob(
+            target_type=TargetType.STOP,
+            trigger=Trigger.CONTRIBUTION,
+            ruleset_version="1.0",
+            target_ids=frozenset([stop.id]),
+        )
+        with patch(
+            "transit.evaluation.executor.try_advisory_lock", return_value=False
+        ):
+            result = executor.execute(job)
+
+        # Contribution triggers: skip is silent, success is True
+        self.assertTrue(result.success)
+        self.assertEqual(result.skipped_locked, 1)
+        self.assertEqual(result.errors, [])
+
+    def test_admin_route_job_reports_error_on_lock_contention(self):
+        """Admin route recompute reports failure when a lock is held."""
+        route = Route(
+            name="Locked Route",
+            public_id=f"route-{uuid4().hex[:8]}",
+        )
+        route._internal_save()
+
+        executor = InlineExecutor()
+        job = EvaluationJob(
+            target_type=TargetType.ROUTE,
+            trigger=Trigger.ADMIN,
+            ruleset_version="1.0",
+            target_ids=frozenset([route.id]),
+        )
+        with patch(
+            "transit.evaluation.executor.try_advisory_lock", return_value=False
+        ):
+            result = executor.execute(job)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.skipped_locked, 1)
+        self.assertTrue(
+            any("lock held" in e for e in result.errors),
+            f"Expected lock contention error, got: {result.errors}",
+        )
+
+    def test_contribution_route_job_skips_silently_on_lock_contention(self):
+        """Contribution-triggered route job skips locked entities without error."""
+        route = Route(
+            name="Locked Route",
+            public_id=f"route-{uuid4().hex[:8]}",
+        )
+        route._internal_save()
+
+        executor = InlineExecutor()
+        job = EvaluationJob(
+            target_type=TargetType.ROUTE,
+            trigger=Trigger.CONTRIBUTION,
+            ruleset_version="1.0",
+            target_ids=frozenset([route.id]),
+        )
+        with patch(
+            "transit.evaluation.executor.try_advisory_lock", return_value=False
+        ):
+            result = executor.execute(job)
+
+        # Contribution triggers: skip is silent, success is True
+        self.assertTrue(result.success)
+        self.assertEqual(result.skipped_locked, 1)
+        self.assertEqual(result.errors, [])
+
+
+class EvaluatorErrorRollbackTests(TransactionTestCase):
+    """Tests that evaluator-reported errors trigger transaction rollback
+    so no partial canonical writes persist (#1)."""
+
+    def test_stop_evaluator_errors_rollback_canonical_writes(self):
+        """If StopEvaluator reports errors, canonical state is unchanged."""
+        stop = Stop(
+            name="Rollback Stop",
+            location=Point(-74.0, 40.7),
+            public_id=f"stop-{uuid4().hex[:8]}",
+            structural_confidence=Decimal("0.5"),
+        )
+        stop._internal_save()
+        original_confidence = stop.structural_confidence
+
+        from transit.evaluation.base import EvaluationResult as BaseEvalResult
+
+        # Mock evaluate_with_creation to return errors
+        mock_eval_result = BaseEvalResult()
+        mock_eval_result.canonical_writes = 1
+        mock_eval_result.add_error("simulated evaluator error")
+
+        executor = InlineExecutor()
+        with patch(
+            "transit.evaluation.executor.StopEvaluator.evaluate_with_creation",
+            return_value=(mock_eval_result, [], []),
+        ):
+            job = EvaluationJob(
+                target_type=TargetType.STOP,
+                trigger=Trigger.ADMIN,
+                ruleset_version="1.0",
+                target_ids=frozenset([stop.id]),
+            )
+            result = executor.execute(job)
+
+        self.assertFalse(result.success)
+        self.assertTrue(
+            any("simulated evaluator error" in e for e in result.errors),
+        )
+        # Canonical writes should be 0 — the transaction was rolled back
+        self.assertEqual(result.canonical_writes, 0)
+        # DB state unchanged
+        stop.refresh_from_db()
+        self.assertEqual(stop.structural_confidence, original_confidence)
+
+
+class RecomputeAllSkippedLockedTests(TransactionTestCase):
+    """Tests that recompute_all aborts route recompute when stops
+    are partially recomputed due to lock contention (#4)."""
+
+    def test_recompute_all_aborts_routes_on_stop_skipped_locked(self):
+        """If stops have skipped_locked > 0, routes are NOT executed."""
+        execution_order = []
+
+        class SkipLockedStopsExecutor(BaseExecutor):
+            def execute(self, job):
+                execution_order.append(job.target_type)
+                if job.target_type == TargetType.STOP:
+                    return ExecutionResult(
+                        job=job,
+                        success=True,
+                        entities_evaluated=5,
+                        skipped_locked=1,  # One stop was locked
+                    )
+                return ExecutionResult(job=job, success=True)
+
+        executor = SkipLockedStopsExecutor()
+        result = recompute_all(executor)
+
+        # Only stop job should have been executed — routes aborted
+        self.assertEqual(len(execution_order), 1)
+        self.assertEqual(execution_order[0], TargetType.STOP)
+        self.assertEqual(result.total_jobs, 1)
+
+    def test_recompute_all_proceeds_when_no_stops_skipped(self):
+        """When all stops complete without contention, routes run."""
+        execution_order = []
+
+        class FullSuccessExecutor(BaseExecutor):
+            def execute(self, job):
+                execution_order.append(job.target_type)
+                return ExecutionResult(
+                    job=job,
+                    success=True,
+                    entities_evaluated=3,
+                    skipped_locked=0,
+                )
+
+        executor = FullSuccessExecutor()
+        result = recompute_all(executor)
+
+        self.assertEqual(len(execution_order), 2)
+        self.assertEqual(execution_order[0], TargetType.STOP)
+        self.assertEqual(execution_order[1], TargetType.ROUTE)
+        self.assertTrue(result.all_successful)
+
+
+class ReplaySafeEvaluationTimeTests(TransactionTestCase):
+    """Tests that evaluation_time uses job.created_at for replay safety (#2, #3)."""
+
+    def test_stop_evaluation_uses_job_created_at(self):
+        """Stop evaluation context uses job.created_at, not timezone.now()."""
+        stop = Stop(
+            name="Replay Stop",
+            location=Point(-74.0, 40.7),
+            public_id=f"stop-{uuid4().hex[:8]}",
+        )
+        stop._internal_save()
+
+        fixed_time = timezone.now() - timedelta(hours=1)
+        job = EvaluationJob(
+            target_type=TargetType.STOP,
+            trigger=Trigger.REPLAY,
+            ruleset_version="1.0",
+            target_ids=frozenset([stop.id]),
+            created_at=fixed_time,
+        )
+
+        captured_contexts = []
+        original_init = StopEvaluator.__init__
+
+        def capturing_init(self_eval, context):
+            captured_contexts.append(context)
+            original_init(self_eval, context)
+
+        executor = InlineExecutor()
+        with patch.object(StopEvaluator, "__init__", capturing_init):
+            executor.execute(job)
+
+        self.assertEqual(len(captured_contexts), 1)
+        self.assertEqual(captured_contexts[0].evaluation_time, fixed_time)
+
+    def test_route_evaluation_uses_job_created_at(self):
+        """Route evaluation context uses job.created_at, not timezone.now()."""
+        route = Route(
+            name="Replay Route",
+            public_id=f"route-{uuid4().hex[:8]}",
+        )
+        route._internal_save()
+
+        fixed_time = timezone.now() - timedelta(hours=2)
+        job = EvaluationJob(
+            target_type=TargetType.ROUTE,
+            trigger=Trigger.REPLAY,
+            ruleset_version="1.0",
+            target_ids=frozenset([route.id]),
+            created_at=fixed_time,
+        )
+
+        captured_contexts = []
+        original_init = RouteEvaluator.__init__
+
+        def capturing_init(self_eval, context):
+            captured_contexts.append(context)
+            original_init(self_eval, context)
+
+        executor = InlineExecutor()
+        with patch.object(RouteEvaluator, "__init__", capturing_init):
+            executor.execute(job)
+
+        self.assertEqual(len(captured_contexts), 1)
+        self.assertEqual(captured_contexts[0].evaluation_time, fixed_time)

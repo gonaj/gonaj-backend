@@ -202,6 +202,16 @@ def recompute_all(
         )
         return orchestration
 
+    if stop_result.skipped_locked > 0:
+        logger.error(
+            "Stop recompute incomplete: %d stops skipped due to lock "
+            "contention (job_id=%s). Aborting Route recompute to prevent "
+            "evaluation against partially recomputed Stops.",
+            stop_result.skipped_locked,
+            stop_job.job_id,
+        )
+        return orchestration
+
     logger.info(
         "Recompute ALL — Phase 1 complete: %d stops evaluated",
         stop_result.entities_evaluated,

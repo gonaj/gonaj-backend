@@ -41,7 +41,7 @@ from django.utils import timezone
 from transit.models import Route, Stop
 
 from .base import EvaluationContext
-from .jobs import EvaluationJob, TargetType
+from .jobs import EvaluationJob, TargetType, Trigger
 from .locking import (
     derive_route_lock_key,
     derive_stop_lock_key,
@@ -52,6 +52,15 @@ from .route_evaluator import RouteEvaluator
 from .stop_evaluator import StopEvaluator
 
 logger = logging.getLogger(__name__)
+
+
+class _EvaluatorError(Exception):
+    """Internal sentinel raised inside transaction.atomic() to force rollback
+    when the evaluator reports errors (failure-safety: no partial writes)."""
+
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__(f"Evaluator reported {len(errors)} error(s)")
 
 
 @dataclass(frozen=True)
@@ -200,7 +209,7 @@ class InlineExecutor(BaseExecutor):
 
         context = EvaluationContext(
             ruleset_version=job.ruleset_version,
-            evaluation_time=timezone.now(),
+            evaluation_time=job.created_at,
             is_incremental=job.target_ids is not None,
         )
 
@@ -214,6 +223,11 @@ class InlineExecutor(BaseExecutor):
                     "Skipping stop %s - lock held by another session", stop_id
                 )
                 skipped_locked += 1
+                if job.trigger != Trigger.CONTRIBUTION:
+                    errors.append(
+                        f"Stop {stop_id}: lock held by another session; "
+                        f"evaluation skipped"
+                    )
                 continue
 
             try:
@@ -223,12 +237,17 @@ class InlineExecutor(BaseExecutor):
                     _result, _stops, _decisions = evaluator.evaluate_with_creation(
                         evidence
                     )
+                    if _result.has_errors():
+                        # Rollback canonical writes on evaluator errors
+                        # (failure-safety: no partial writes)
+                        raise _EvaluatorError(_result.errors)
                     canonical_writes += _result.canonical_writes
                 entities_evaluated += 1
 
-                if _result.has_errors():
-                    errors.extend(_result.errors)
-
+            except _EvaluatorError as eval_err:
+                errors.extend(
+                    f"Stop {stop_id}: {message}" for message in eval_err.errors
+                )
             except Exception as exc:
                 logger.exception(
                     "Stop evaluation failed for %s: %s", stop_id, exc
@@ -258,7 +277,7 @@ class InlineExecutor(BaseExecutor):
 
         context = EvaluationContext(
             ruleset_version=job.ruleset_version,
-            evaluation_time=timezone.now(),
+            evaluation_time=job.created_at,
             is_incremental=job.target_ids is not None,
         )
 
@@ -272,18 +291,23 @@ class InlineExecutor(BaseExecutor):
                     "Skipping route %s - lock held by another session", route_id
                 )
                 skipped_locked += 1
+                if job.trigger != Trigger.CONTRIBUTION:
+                    errors.append(
+                        f"Route {route_id}: lock held by another session; "
+                        f"evaluation skipped"
+                    )
                 continue
 
             try:
                 evidence = self._get_route_evidence(route_id)
                 evaluator = RouteEvaluator(context)
                 with transaction.atomic():
-                    eval_result = evaluator.evaluate_routes(evidence)
+                    _eval_result = evaluator.evaluate_routes(evidence)
                 entities_evaluated += 1
 
                 # Route evaluator is read-only (no canonical writes in v0).
                 # When route evaluation gains write capability, reflect
-                # canonical_writes here from eval_result.
+                # canonical_writes here from _eval_result.
 
                 # Surface base evaluator errors if any were recorded
                 base_result = evaluator.result
