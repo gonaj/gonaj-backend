@@ -127,7 +127,6 @@ class RouteSerializer(CanonicalReadSerializerBase):
     - name: Full route name
     - short_name: Short identifier (e.g., "42", "Red")
     - route_type: Type of transit service (bus, metro, etc.)
-    - belief_state: Human-readable confidence projection
     
     EXPLICITLY BLOCKED:
     - Internal UUID (id field)
@@ -138,6 +137,7 @@ class RouteSerializer(CanonicalReadSerializerBase):
     - Operator field (deferred to future versions)
     - Properties JSON (deferred to future versions)
     - Related entities (variants, stops)
+    - belief_state (removed in Sprint-11, routes have binary canonical truth only)
     
     RELATIONSHIP EXPANSION BAN (v1):
     This serializer never embeds or expands related entities.
@@ -164,15 +164,8 @@ class RouteSerializer(CanonicalReadSerializerBase):
         )
     )
     
-    belief_state = serializers.CharField(
-        help_text=(
-            "Human-readable confidence state. "
-            f"Valid values: {', '.join(Route.BeliefState.values)}."
-        )
-    )
-    
     class Meta:
-        allowed_fields = {'public_id', 'name', 'short_name', 'route_type', 'belief_state'}
+        allowed_fields = {'public_id', 'name', 'short_name', 'route_type'}
 
 
 class StopListView(CanonicalReadPaginationMixin, APIView):

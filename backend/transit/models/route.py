@@ -76,25 +76,6 @@ class Route(CanonicalModel):
         MONORAIL = "monorail", "Monorail"
         OTHER = "other", "Other"
 
-    # === Belief States (Phase-2 Sprint-6) ===
-
-    class BeliefState(models.TextChoices):
-        """
-        Human-legible projection of Route confidence.
-
-        PROPOSED: Newly created, fragile belief
-        ACTIVE_LOW: Exists but uncertain
-        ACTIVE_HIGH: Stable, reinforced belief
-        CONTESTED: Conflicting evidence present (negative + positive)
-        DORMANT: Belief exists but is outdated
-        """
-
-        PROPOSED = "proposed", "Proposed"
-        ACTIVE_LOW = "active_low", "Active (Low Confidence)"
-        ACTIVE_HIGH = "active_high", "Active (High Confidence)"
-        CONTESTED = "contested", "Contested"
-        DORMANT = "dormant", "Dormant"
-
     # === Domain-specific Fields ===
 
     name = models.CharField(
@@ -119,17 +100,6 @@ class Route(CanonicalModel):
         choices=RouteType.choices,
         default=RouteType.BUS,
         help_text="Type of transit service.",
-    )
-
-    belief_state = models.CharField(
-        max_length=20,
-        choices=BeliefState.choices,
-        default=BeliefState.PROPOSED,
-        help_text=(
-            "Human-legible projection of Route confidence (Phase-2 Sprint-6). "
-            "Derived from structural_confidence, freshness_confidence, "
-            "and presence of negative evidence. Not a workflow state."
-        ),
     )
 
     operator = models.CharField(
