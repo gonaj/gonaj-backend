@@ -103,6 +103,26 @@ from .stop_creation import (
 )
 from .stop_evaluator import StopEvaluator, StopWriteGateway
 
+# Sprint-12: Performance & Recompute Control
+from .executor import BaseExecutor, ExecutionResult, InlineExecutor
+from .jobs import EvaluationJob, TargetType, Trigger
+from .locking import (
+    advisory_lock,
+    derive_route_lock_key,
+    derive_stop_lock_key,
+    route_evaluation_lock,
+    stop_evaluation_lock,
+)
+from .orchestration import (
+    DEFAULT_RULESET_VERSION,
+    OrchestrationResult,
+    create_evaluation_job_for_contribution,
+    enqueue_evaluation_for_contribution,
+    recompute_all,
+    recompute_routes,
+    recompute_stops,
+)
+
 __all__ = [
     # Sprint-4A: Evaluation scaffolding
     "BaseEvaluator",
@@ -141,4 +161,23 @@ __all__ = [
     "RouteWeightCalculator",
     "check_route_stop_dependency",
     "evaluate_route_canonical_status",
+    # Sprint-12: Performance & Recompute Control
+    "EvaluationJob",
+    "TargetType",
+    "Trigger",
+    "BaseExecutor",
+    "ExecutionResult",
+    "InlineExecutor",
+    "advisory_lock",
+    "derive_stop_lock_key",
+    "derive_route_lock_key",
+    "stop_evaluation_lock",
+    "route_evaluation_lock",
+    "OrchestrationResult",
+    "DEFAULT_RULESET_VERSION",
+    "recompute_stops",
+    "recompute_routes",
+    "recompute_all",
+    "create_evaluation_job_for_contribution",
+    "enqueue_evaluation_for_contribution",
 ]
